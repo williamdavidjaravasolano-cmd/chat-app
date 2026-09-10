@@ -32,9 +32,21 @@ const mensajeSchema = new mongoose.Schema({
   texto: { type: String, required: true },
   tipo: { type: String, default: 'texto' }, // 'texto' o 'imagen'
   hora: String,
-  fecha: { type: Date, default: Date.now }
+  fecha: { type: Date, default: Date.now },
+  esRespuestaFaq: { type: Boolean, default: false }, // true si es respuesta automatica de una pregunta frecuente
+  preguntaOrigen: { type: String, default: null } // la pregunta que genero esta respuesta
 });
 const Mensaje = mongoose.model('Mensaje', mensajeSchema);
+
+// ---------- Modelo de votos de la encuesta de satisfaccion ----------
+const votoSchema = new mongoose.Schema({
+  sala: String,
+  pregunta: String,
+  voto: String, // 'positivo' o 'negativo'
+  nombre: String,
+  fecha: { type: Date, default: Date.now }
+});
+const Voto = mongoose.model('Voto', votoSchema);
 
 // ---------- Preguntas frecuentes por sala ----------
 // Puedes agregar mas preguntas y respuestas aqui. Cada pregunta debe escribirse
@@ -167,15 +179,18 @@ io.on('connection', (socket) => {
     // ---------- Respuestas automaticas ----------
     let respuestaBot = null;
     let nombreBot = null;
+    let esFaq = false;
     const textoExacto = data.texto.trim();
     const textoNormalizado = normalizarTexto(data.texto);
 
     if (data.sala === SALA_SOPORTE && preguntasFrecuentes[textoExacto]) {
       respuestaBot = preguntasFrecuentes[textoExacto];
       nombreBot = NOMBRE_BOT_SOPORTE;
+      esFaq = true;
     } else if (data.sala === SALA_ASESORIA && preguntasAsesoria[textoExacto]) {
       respuestaBot = preguntasAsesoria[textoExacto];
       nombreBot = NOMBRE_BOT_ASESORIA;
+      esFaq = true;
     } else if (data.tipo === 'texto' && saludos.includes(textoNormalizado)) {
       respuestaBot = `¡Hola ${data.nombre}! Bienvenido a la sala "${data.sala}". ¿En qué te podemos ayudar hoy?`;
       nombreBot = NOMBRE_BOT_SALUDO;
@@ -188,15 +203,48 @@ io.on('connection', (socket) => {
           nombre: nombreBot,
           texto: respuestaBot,
           tipo: 'texto',
-          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }),
+          esRespuestaFaq: esFaq,
+          preguntaOrigen: esFaq ? textoExacto : null
         };
         try {
-          await new Mensaje(mensajeBot).save();
+          const guardado = await new Mensaje(mensajeBot).save();
+          mensajeBot._id = guardado._id;
         } catch (err) {
           console.error('Error guardando respuesta del bot:', err.message);
         }
         io.to(data.sala).emit('mensaje', mensajeBot);
       }, 800);
+    }
+  });
+
+  // El usuario responde la encuesta de satisfaccion (👍 o 👎) de una respuesta del bot
+  socket.on('voto-respuesta', async ({ sala, pregunta, voto, nombre }) => {
+    try {
+      await new Voto({ sala, pregunta, voto, nombre }).save();
+    } catch (err) {
+      console.error('Error guardando el voto:', err.message);
+    }
+
+    // Si el voto fue negativo, avisamos que un asesor va a contactar a la persona
+    if (voto === 'negativo') {
+      const nombreBot = sala === SALA_SOPORTE ? NOMBRE_BOT_SOPORTE
+        : sala === SALA_ASESORIA ? NOMBRE_BOT_ASESORIA
+        : NOMBRE_BOT_SALUDO;
+
+      const mensajeBot = {
+        sala,
+        nombre: nombreBot,
+        texto: `Entendido, ${nombre}. Un asesor va a contactarte pronto para ayudarte con este tema.`,
+        tipo: 'texto',
+        hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+      };
+      try {
+        await new Mensaje(mensajeBot).save();
+      } catch (err) {
+        console.error('Error guardando mensaje de derivacion:', err.message);
+      }
+      io.to(sala).emit('mensaje', mensajeBot);
     }
   });
 

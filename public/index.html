@@ -231,6 +231,26 @@
     font-size: 13px;
   }
   #faq-panel button:hover { background: #dcf8c6; }
+
+  .encuesta {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .encuesta span.encuesta-texto {
+    font-size: 11px;
+    color: #666;
+  }
+  .encuesta button {
+    background: #f0f0f0;
+    border: none;
+    border-radius: 6px;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .encuesta button:hover { background: #e0e0e0; }
 </style>
 </head>
 <body>
@@ -448,6 +468,8 @@
   });
 
   // ---------- Recepcion de mensajes ----------
+  const votosRealizados = new Set(); // ids de mensajes que ya recibieron voto en esta sesion
+
   function pintarMensaje(data) {
     const div = document.createElement('div');
     div.classList.add('mensaje');
@@ -465,6 +487,33 @@
       ${contenidoHtml}
       <div class="hora">${data.hora || ''}</div>
     `;
+
+    // Si es una respuesta de pregunta frecuente, agregamos la encuesta de satisfaccion
+    if (data.esRespuestaFaq && data._id && !votosRealizados.has(data._id)) {
+      const encuesta = document.createElement('div');
+      encuesta.classList.add('encuesta');
+      encuesta.innerHTML = `
+        <span class="encuesta-texto">¿Te sirvió esta respuesta?</span>
+        <button type="button" data-voto="positivo">👍</button>
+        <button type="button" data-voto="negativo">👎</button>
+      `;
+
+      encuesta.querySelectorAll('button').forEach((boton) => {
+        boton.addEventListener('click', () => {
+          socket.emit('voto-respuesta', {
+            sala: miSala,
+            pregunta: data.preguntaOrigen,
+            voto: boton.dataset.voto,
+            nombre: miNombre
+          });
+          votosRealizados.add(data._id);
+          encuesta.innerHTML = '<span class="encuesta-texto">¡Gracias por tu opinión!</span>';
+        });
+      });
+
+      div.appendChild(encuesta);
+    }
+
     mensajesDiv.appendChild(div);
     mensajesDiv.scrollTop = mensajesDiv.scrollHeight;
   }
