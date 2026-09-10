@@ -22,15 +22,23 @@
     border-radius: 10px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.15);
     text-align: center;
-    width: 300px;
+    width: 320px;
   }
   #login-box h2 { margin-top: 0; color: #075e54; }
-  #login-box input {
+  #login-box input, #login-box select {
     width: 100%;
     padding: 10px;
-    margin: 10px 0;
+    margin: 8px 0;
     border: 1px solid #ccc;
     border-radius: 6px;
+    font-size: 14px;
+  }
+  #login-box label {
+    display: block;
+    text-align: left;
+    font-size: 13px;
+    color: #555;
+    margin-top: 10px;
   }
   #login-box button {
     width: 100%;
@@ -41,19 +49,21 @@
     border-radius: 6px;
     cursor: pointer;
     font-weight: bold;
+    margin-top: 12px;
   }
 
   #chat-container {
     display: none;
-    width: 400px;
+    width: 420px;
     max-width: 95vw;
-    height: 600px;
+    height: 620px;
     max-height: 90vh;
     background: white;
     border-radius: 10px;
     overflow: hidden;
     box-shadow: 0 2px 10px rgba(0,0,0,0.15);
     flex-direction: column;
+    position: relative;
   }
 
   #chat-header {
@@ -61,7 +71,11 @@
     color: white;
     padding: 15px;
     font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
+  #chat-header .sala-nombre { font-size: 14px; font-weight: normal; opacity: 0.85; }
 
   #mensajes {
     flex: 1;
@@ -94,6 +108,12 @@
     text-align: right;
     margin-top: 3px;
   }
+  .mensaje img.imagen-chat {
+    max-width: 100%;
+    border-radius: 6px;
+    margin-top: 5px;
+    cursor: pointer;
+  }
 
   .sistema {
     text-align: center;
@@ -112,8 +132,10 @@
 
   #form-mensaje {
     display: flex;
+    align-items: center;
     padding: 10px;
     background: #f0f0f0;
+    gap: 6px;
   }
   #input-mensaje {
     flex: 1;
@@ -122,17 +144,48 @@
     border-radius: 20px;
     outline: none;
   }
-  #form-mensaje button {
-    margin-left: 8px;
-    background: #25d366;
-    color: white;
+  .btn-circular {
+    background: #f0f0f0;
+    color: #075e54;
     border: none;
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
+    width: 38px;
+    height: 38px;
     cursor: pointer;
     font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
+  #form-mensaje button[type="submit"] {
+    background: #25d366;
+    color: white;
+  }
+
+  #emoji-picker {
+    display: none;
+    position: absolute;
+    bottom: 60px;
+    left: 10px;
+    right: 10px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.15);
+    flex-wrap: wrap;
+    gap: 4px;
+    max-height: 160px;
+    overflow-y: auto;
+    z-index: 10;
+  }
+  #emoji-picker span {
+    font-size: 22px;
+    cursor: pointer;
+    padding: 3px;
+  }
+  #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -140,16 +193,35 @@
 <div id="login-box">
   <h2>Entrar al chat</h2>
   <input type="text" id="input-nombre" placeholder="Escribe tu nombre" maxlength="20">
+
+  <label for="select-sala">Elige una sala</label>
+  <select id="select-sala">
+    <option value="General">General</option>
+    <option value="Soporte Tecnico">Soporte tecnico</option>
+    <option value="Asesoria Tecnica">Asesoria tecnica</option>
+    <option value="__otra__">Otra sala...</option>
+  </select>
+  <input type="text" id="input-sala-custom" placeholder="Escribe el nombre de la sala" style="display:none;">
+
   <button id="btn-entrar">Entrar</button>
 </div>
 
 <div id="chat-container">
-  <div id="chat-header">💬 Chat en linea</div>
+  <div id="chat-header">
+    <span>Chat en linea</span>
+    <span class="sala-nombre" id="sala-actual-label"></span>
+  </div>
   <div id="mensajes"></div>
   <div id="escribiendo-indicador"></div>
+
+  <div id="emoji-picker"></div>
+
   <form id="form-mensaje">
+    <button type="button" class="btn-circular" id="btn-emoji" title="Emojis">😊</button>
+    <button type="button" class="btn-circular" id="btn-imagen" title="Enviar imagen">📷</button>
+    <input type="file" id="input-imagen" accept="image/*" style="display:none;">
     <input type="text" id="input-mensaje" placeholder="Escribe un mensaje..." autocomplete="off">
-    <button type="submit">➤</button>
+    <button type="submit" class="btn-circular">➤</button>
   </form>
 </div>
 
@@ -157,23 +229,44 @@
 <script>
   const socket = io();
   let miNombre = '';
+  let miSala = '';
 
   const loginBox = document.getElementById('login-box');
   const chatContainer = document.getElementById('chat-container');
   const inputNombre = document.getElementById('input-nombre');
+  const selectSala = document.getElementById('select-sala');
+  const inputSalaCustom = document.getElementById('input-sala-custom');
   const btnEntrar = document.getElementById('btn-entrar');
   const mensajesDiv = document.getElementById('mensajes');
   const formMensaje = document.getElementById('form-mensaje');
   const inputMensaje = document.getElementById('input-mensaje');
   const escribiendoIndicador = document.getElementById('escribiendo-indicador');
+  const salaActualLabel = document.getElementById('sala-actual-label');
+  const btnEmoji = document.getElementById('btn-emoji');
+  const emojiPicker = document.getElementById('emoji-picker');
+  const btnImagen = document.getElementById('btn-imagen');
+  const inputImagen = document.getElementById('input-imagen');
+
+  selectSala.addEventListener('change', () => {
+    inputSalaCustom.style.display = selectSala.value === '__otra__' ? 'block' : 'none';
+  });
 
   function entrarAlChat() {
     const nombre = inputNombre.value.trim();
     if (!nombre) return;
+
+    let sala = selectSala.value;
+    if (sala === '__otra__') {
+      sala = inputSalaCustom.value.trim();
+      if (!sala) return;
+    }
+
     miNombre = nombre;
-    socket.emit('nuevo-usuario', nombre);
+    miSala = sala;
+    socket.emit('unirse-sala', { nombre, sala });
     loginBox.style.display = 'none';
     chatContainer.style.display = 'flex';
+    salaActualLabel.textContent = sala;
     inputMensaje.focus();
   }
 
@@ -186,26 +279,85 @@
     e.preventDefault();
     const texto = inputMensaje.value.trim();
     if (!texto) return;
-    socket.emit('mensaje', { nombre: miNombre, texto });
+    socket.emit('mensaje', { nombre: miNombre, sala: miSala, texto, tipo: 'texto' });
     inputMensaje.value = '';
   });
 
-  let escribiendoTimeout;
   inputMensaje.addEventListener('input', () => {
-    socket.emit('escribiendo', miNombre);
+    socket.emit('escribiendo', { nombre: miNombre, sala: miSala });
   });
 
-  socket.on('mensaje', (data) => {
+  // ---------- Emojis ----------
+  const listaEmojis = ['😀','😁','😂','🤣','😊','😍','😘','😉','😎','🤔','😴','😢','😭','😡','👍','👎','🙏','👏','🎉','❤️','🔥','✅','❌','💡','📌','⚠️','😅','😇','🙌','💪'];
+  listaEmojis.forEach((emoji) => {
+    const span = document.createElement('span');
+    span.textContent = emoji;
+    span.addEventListener('click', () => {
+      inputMensaje.value += emoji;
+      inputMensaje.focus();
+    });
+    emojiPicker.appendChild(span);
+  });
+
+  btnEmoji.addEventListener('click', () => {
+    emojiPicker.style.display = emojiPicker.style.display === 'flex' ? 'none' : 'flex';
+  });
+
+  // ---------- Imagenes ----------
+  btnImagen.addEventListener('click', () => inputImagen.click());
+
+  inputImagen.addEventListener('change', () => {
+    const archivo = inputImagen.files[0];
+    if (!archivo) return;
+
+    if (archivo.size > 4 * 1024 * 1024) {
+      alert('La imagen es muy pesada. Elige una de menos de 4 MB.');
+      inputImagen.value = '';
+      return;
+    }
+
+    const lector = new FileReader();
+    lector.onload = () => {
+      socket.emit('mensaje', {
+        nombre: miNombre,
+        sala: miSala,
+        texto: lector.result,
+        tipo: 'imagen'
+      });
+      inputImagen.value = '';
+    };
+    lector.readAsDataURL(archivo);
+  });
+
+  // ---------- Recepcion de mensajes ----------
+  function pintarMensaje(data) {
     const div = document.createElement('div');
     div.classList.add('mensaje');
     if (data.nombre === miNombre) div.classList.add('propio');
+
+    let contenidoHtml;
+    if (data.tipo === 'imagen') {
+      contenidoHtml = `<img class="imagen-chat" src="${data.texto}" alt="imagen enviada">`;
+    } else {
+      contenidoHtml = `<div class="texto">${escaparHTML(data.texto)}</div>`;
+    }
+
     div.innerHTML = `
-      <div class="nombre">${data.nombre}</div>
-      <div class="texto">${escaparHTML(data.texto)}</div>
-      <div class="hora">${data.hora}</div>
+      <div class="nombre">${escaparHTML(data.nombre)}</div>
+      ${contenidoHtml}
+      <div class="hora">${data.hora || ''}</div>
     `;
     mensajesDiv.appendChild(div);
     mensajesDiv.scrollTop = mensajesDiv.scrollHeight;
+  }
+
+  socket.on('historial', (mensajes) => {
+    mensajesDiv.innerHTML = '';
+    mensajes.forEach(pintarMensaje);
+  });
+
+  socket.on('mensaje', (data) => {
+    pintarMensaje(data);
     escribiendoIndicador.textContent = '';
   });
 
@@ -217,6 +369,7 @@
     mensajesDiv.scrollTop = mensajesDiv.scrollHeight;
   });
 
+  let escribiendoTimeout;
   socket.on('escribiendo', (nombre) => {
     escribiendoIndicador.textContent = `${nombre} esta escribiendo...`;
     clearTimeout(escribiendoTimeout);

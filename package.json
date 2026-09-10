@@ -1,13 +1,14 @@
 {
   "name": "chat-app",
-  "version": "1.0.0",
-  "description": "Pagina de mensajeria en tiempo real",
+  "version": "2.0.0",
+  "description": "Pagina de mensajeria en tiempo real con salas, imagenes, emojis e historial",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.19.2",
-    "socket.io": "^4.7.5"
+    "socket.io": "^4.7.5",
+    "mongoose": "^8.5.0"
   }
 }
