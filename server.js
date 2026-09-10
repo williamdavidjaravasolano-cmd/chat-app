@@ -72,7 +72,7 @@ io.on('connection', (socket) => {
       nombre: data.nombre,
       texto: data.texto,
       tipo: data.tipo || 'texto',
-      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
     };
 
     // Guardar en la base de datos para que quede en el historial
