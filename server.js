@@ -49,70 +49,113 @@ const votoSchema = new mongoose.Schema({
 const Voto = mongoose.model('Voto', votoSchema);
 
 // ---------- Preguntas frecuentes por sala ----------
-// Puedes agregar mas preguntas y respuestas aqui. Cada pregunta debe escribirse
-// EXACTAMENTE igual en el archivo public/index.html (objeto preguntasPorSala).
+// Puedes agregar mas preguntas aqui. El "pregunta" debe escribirse EXACTAMENTE
+// igual en el archivo public/index.html (objeto preguntasPorSala), porque es lo
+// que se envia cuando alguien hace click en el boton. Las "palabrasClave" son
+// para reconocer la pregunta aunque el usuario la escriba distinto -- agrega
+// todas las variaciones que se te ocurran, en minusculas y sin tildes.
 const NOMBRE_BOT_SOPORTE = 'Soporte Tecnico 🤖';
 const SALA_SOPORTE = 'Soporte Tecnico';
 
-const preguntasFrecuentes = {
-  'Se me apagó el equipo y no enciende':
-    '1. Desconecta el cable de energía del computador.\n' +
-    '2. Mantén presionado el botón de encendido (power) durante 15 segundos para liberar la energía estática.\n' +
-    '3. Vuelve a conectar el cable de energía.\n' +
-    '4. Presiona el botón de encendido (power) — el equipo debería encender normalmente.\n' +
-    'Si aún así no enciende, revisa que el cable y el tomacorriente funcionen probando con otro aparato.',
-
-  'Mi computador está muy lento':
-    '1. Cierra los programas y pestañas del navegador que no estés usando.\n' +
-    '2. Reinicia el equipo por completo (no solo cerrar sesión).\n' +
-    '3. Revisa cuánto espacio libre tienes en el disco duro; si está casi lleno, elimina archivos que no uses.\n' +
-    '4. Ejecuta el antivirus para descartar programas maliciosos.\n' +
-    'Si el problema continúa después de estos pasos, escribe aquí para que un asesor te ayude en detalle.',
-
-  'No tengo conexión a internet o wifi':
-    '1. Verifica que el wifi esté activado en tu equipo (icono de wifi en la barra de tareas).\n' +
-    '2. Reinicia el router: desconéctalo de la energía, espera 30 segundos y vuelve a conectarlo.\n' +
-    '3. Espera 1-2 minutos a que las luces del router se estabilicen.\n' +
-    '4. Intenta conectarte de nuevo a la red wifi con la contraseña correcta.\n' +
-    'Si otros equipos tampoco tienen internet, es probable que sea un problema del proveedor de internet.',
-
-  'Olvidé mi contraseña de usuario en Windows':
-    '1. En la pantalla de inicio de sesión, haz click en "¿Olvidaste tu contraseña?".\n' +
-    '2. Sigue las instrucciones para restablecerla usando tu correo o preguntas de seguridad asociadas a la cuenta.\n' +
-    '3. Si el equipo no tiene esa opción configurada, se puede necesitar acceso físico al equipo para restablecerla.\n' +
-    'Si no logras recuperarla con estos pasos, escribe aquí para que un asesor te guíe con más detalle.'
-};
+const preguntasFrecuentes = [
+  {
+    pregunta: 'Se me apagó el equipo y no enciende',
+    palabrasClave: ['no enciende', 'no prende', 'no arranca', 'se apago y no', 'pantalla negra', 'no enciende el computador', 'no enciende el equipo', 'no enciende el pc'],
+    respuesta:
+      '1. Desconecta el cable de energía del computador.\n' +
+      '2. Mantén presionado el botón de encendido (power) durante 15 segundos para liberar la energía estática.\n' +
+      '3. Vuelve a conectar el cable de energía.\n' +
+      '4. Presiona el botón de encendido (power) — el equipo debería encender normalmente.\n' +
+      'Si aún así no enciende, revisa que el cable y el tomacorriente funcionen probando con otro aparato.'
+  },
+  {
+    pregunta: 'Mi computador está muy lento',
+    palabrasClave: ['lento', 'lenta', 'muy lento', 'se demora', 'esta pesado', 'va lento', 'anda lento', 'trabado', 'se pega'],
+    respuesta:
+      '1. Cierra los programas y pestañas del navegador que no estés usando.\n' +
+      '2. Reinicia el equipo por completo (no solo cerrar sesión).\n' +
+      '3. Revisa cuánto espacio libre tienes en el disco duro; si está casi lleno, elimina archivos que no uses.\n' +
+      '4. Ejecuta el antivirus para descartar programas maliciosos.\n' +
+      'Si el problema continúa después de estos pasos, escribe aquí para que un asesor te ayude en detalle.'
+  },
+  {
+    pregunta: 'No tengo conexión a internet o wifi',
+    palabrasClave: ['no tengo internet', 'sin internet', 'no hay wifi', 'no conecta wifi', 'internet no funciona', 'sin wifi', 'no hay señal', 'no carga internet', 'no tengo wifi', 'se corto el internet'],
+    respuesta:
+      '1. Verifica que el wifi esté activado en tu equipo (icono de wifi en la barra de tareas).\n' +
+      '2. Reinicia el router: desconéctalo de la energía, espera 30 segundos y vuelve a conectarlo.\n' +
+      '3. Espera 1-2 minutos a que las luces del router se estabilicen.\n' +
+      '4. Intenta conectarte de nuevo a la red wifi con la contraseña correcta.\n' +
+      'Si otros equipos tampoco tienen internet, es probable que sea un problema del proveedor de internet.'
+  },
+  {
+    pregunta: 'Olvidé mi contraseña de usuario en Windows',
+    palabrasClave: ['olvide mi contraseña', 'se me olvido la clave', 'no recuerdo la contraseña', 'perdi la contraseña', 'clave de windows', 'no recuerdo la clave', 'olvide la clave'],
+    respuesta:
+      '1. En la pantalla de inicio de sesión, haz click en "¿Olvidaste tu contraseña?".\n' +
+      '2. Sigue las instrucciones para restablecerla usando tu correo o preguntas de seguridad asociadas a la cuenta.\n' +
+      '3. Si el equipo no tiene esa opción configurada, se puede necesitar acceso físico al equipo para restablecerla.\n' +
+      'Si no logras recuperarla con estos pasos, escribe aquí para que un asesor te guíe con más detalle.'
+  }
+];
 
 const NOMBRE_BOT_ASESORIA = 'Asesoría Técnica 🤖';
 const SALA_ASESORIA = 'Asesoria Tecnica';
 
-const preguntasAsesoria = {
-  '¿Qué computador me recomiendan comprar?':
-    'Depende del uso que le vayas a dar:\n' +
-    '- Uso basico (internet, redes sociales, documentos): un equipo con 8 GB de RAM y procesador Intel i3/i5 o AMD Ryzen 3/5 es suficiente.\n' +
-    '- Trabajo mas exigente (edicion, diseño, varios programas abiertos): busca 16 GB de RAM y procesador i5/i7 o Ryzen 5/7.\n' +
-    'Cuentanos tu presupuesto y para que lo vas a usar, y un asesor te da una recomendacion mas puntual.',
+const preguntasAsesoria = [
+  {
+    pregunta: '¿Qué computador me recomiendan comprar?',
+    palabrasClave: ['que computador compro', 'que pc me recomiendan', 'cual computador comprar', 'recomiendan un computador', 'que portatil comprar', 'que laptop comprar'],
+    respuesta:
+      'Depende del uso que le vayas a dar:\n' +
+      '- Uso basico (internet, redes sociales, documentos): un equipo con 8 GB de RAM y procesador Intel i3/i5 o AMD Ryzen 3/5 es suficiente.\n' +
+      '- Trabajo mas exigente (edicion, diseño, varios programas abiertos): busca 16 GB de RAM y procesador i5/i7 o Ryzen 5/7.\n' +
+      'Cuentanos tu presupuesto y para que lo vas a usar, y un asesor te da una recomendacion mas puntual.'
+  },
+  {
+    pregunta: '¿Cómo elijo un buen plan de internet?',
+    palabrasClave: ['que plan de internet', 'cual plan de internet', 'plan de internet recomendado', 'que megas necesito', 'cuantos megas necesito'],
+    respuesta:
+      '1. Para uso basico (redes sociales, whatsapp, correo) con 1-2 equipos: 20-50 Mbps es suficiente.\n' +
+      '2. Para streaming en varios equipos o trabajo desde casa: busca 100 Mbps o mas.\n' +
+      '3. Si varias personas usan internet al mismo tiempo, prioriza planes con buena velocidad de subida, no solo de bajada.\n' +
+      'Cuentanos cuantas personas y equipos usan el internet en tu casa para darte una recomendacion mas exacta.'
+  },
+  {
+    pregunta: '¿Necesito antivirus pago o el gratis es suficiente?',
+    palabrasClave: ['antivirus pago', 'antivirus gratis', 'necesito antivirus', 'cual antivirus', 'que antivirus usar'],
+    respuesta:
+      'Para la mayoria de usuarios en casa, el antivirus gratuito que trae Windows (Windows Defender) es suficiente si:\n' +
+      '1. Mantienes Windows actualizado.\n' +
+      '2. No descargas programas de paginas desconocidas.\n' +
+      '3. Tienes cuidado con los enlaces y archivos que llegan por correo o whatsapp.\n' +
+      'Si usas el equipo para trabajo con informacion sensible, un antivirus pago puede darte proteccion adicional.'
+  },
+  {
+    pregunta: '¿Cada cuánto debo hacerle mantenimiento a mi equipo?',
+    palabrasClave: ['cada cuanto mantenimiento', 'cuando hacer mantenimiento', 'mantenimiento del equipo', 'mantenimiento del computador', 'limpieza del computador'],
+    respuesta:
+      'Recomendacion general:\n' +
+      '1. Limpieza de polvo interno: cada 6 meses (o cada 3 si el ambiente tiene mucho polvo).\n' +
+      '2. Revision de espacio en disco y archivos innecesarios: cada mes.\n' +
+      '3. Actualizaciones de Windows y antivirus: dejalas automaticas.\n' +
+      '4. Revision fisica completa por un tecnico: una vez al año.'
+  }
+];
 
-  '¿Cómo elijo un buen plan de internet?':
-    '1. Para uso basico (redes sociales, whatsapp, correo) con 1-2 equipos: 20-50 Mbps es suficiente.\n' +
-    '2. Para streaming en varios equipos o trabajo desde casa: busca 100 Mbps o mas.\n' +
-    '3. Si varias personas usan internet al mismo tiempo, prioriza planes con buena velocidad de subida, no solo de bajada.\n' +
-    'Cuentanos cuantas personas y equipos usan el internet en tu casa para darte una recomendacion mas exacta.',
-
-  '¿Necesito antivirus pago o el gratis es suficiente?':
-    'Para la mayoria de usuarios en casa, el antivirus gratuito que trae Windows (Windows Defender) es suficiente si:\n' +
-    '1. Mantienes Windows actualizado.\n' +
-    '2. No descargas programas de paginas desconocidas.\n' +
-    '3. Tienes cuidado con los enlaces y archivos que llegan por correo o whatsapp.\n' +
-    'Si usas el equipo para trabajo con informacion sensible, un antivirus pago puede darte proteccion adicional.',
-
-  '¿Cada cuánto debo hacerle mantenimiento a mi equipo?':
-    'Recomendacion general:\n' +
-    '1. Limpieza de polvo interno: cada 6 meses (o cada 3 si el ambiente tiene mucho polvo).\n' +
-    '2. Revision de espacio en disco y archivos innecesarios: cada mes.\n' +
-    '3. Actualizaciones de Windows y antivirus: dejalas automaticas.\n' +
-    '4. Revision fisica completa por un tecnico: una vez al año.'
-};
+// Busca una pregunta frecuente por coincidencia exacta primero, y si no,
+// por palabras clave dentro del texto que escribio el usuario.
+function buscarPreguntaFaq(lista, textoNormalizado) {
+  for (const item of lista) {
+    if (normalizarTexto(item.pregunta) === textoNormalizado) return item;
+  }
+  for (const item of lista) {
+    for (const palabra of item.palabrasClave) {
+      if (textoNormalizado.includes(normalizarTexto(palabra))) return item;
+    }
+  }
+  return null;
+}
 
 // ---------- Saludo automatico tipo mesa de ayuda (todas las salas) ----------
 const NOMBRE_BOT_SALUDO = 'Mesa de Ayuda 🤖';
@@ -180,18 +223,28 @@ io.on('connection', (socket) => {
     let respuestaBot = null;
     let nombreBot = null;
     let esFaq = false;
-    const textoExacto = data.texto.trim();
+    let preguntaCanonica = null;
     const textoNormalizado = normalizarTexto(data.texto);
 
-    if (data.sala === SALA_SOPORTE && preguntasFrecuentes[textoExacto]) {
-      respuestaBot = preguntasFrecuentes[textoExacto];
-      nombreBot = NOMBRE_BOT_SOPORTE;
-      esFaq = true;
-    } else if (data.sala === SALA_ASESORIA && preguntasAsesoria[textoExacto]) {
-      respuestaBot = preguntasAsesoria[textoExacto];
-      nombreBot = NOMBRE_BOT_ASESORIA;
-      esFaq = true;
-    } else if (data.tipo === 'texto' && saludos.includes(textoNormalizado)) {
+    if (data.sala === SALA_SOPORTE) {
+      const item = buscarPreguntaFaq(preguntasFrecuentes, textoNormalizado);
+      if (item) {
+        respuestaBot = item.respuesta;
+        nombreBot = NOMBRE_BOT_SOPORTE;
+        esFaq = true;
+        preguntaCanonica = item.pregunta;
+      }
+    } else if (data.sala === SALA_ASESORIA) {
+      const item = buscarPreguntaFaq(preguntasAsesoria, textoNormalizado);
+      if (item) {
+        respuestaBot = item.respuesta;
+        nombreBot = NOMBRE_BOT_ASESORIA;
+        esFaq = true;
+        preguntaCanonica = item.pregunta;
+      }
+    }
+
+    if (!respuestaBot && data.tipo === 'texto' && saludos.includes(textoNormalizado)) {
       respuestaBot = `¡Hola ${data.nombre}! Bienvenido a la sala "${data.sala}". ¿En qué te podemos ayudar hoy?`;
       nombreBot = NOMBRE_BOT_SALUDO;
     }
@@ -205,7 +258,7 @@ io.on('connection', (socket) => {
           tipo: 'texto',
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }),
           esRespuestaFaq: esFaq,
-          preguntaOrigen: esFaq ? textoExacto : null
+          preguntaOrigen: esFaq ? preguntaCanonica : null
         };
         try {
           const guardado = await new Mensaje(mensajeBot).save();
