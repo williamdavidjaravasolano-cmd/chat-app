@@ -36,10 +36,10 @@ const mensajeSchema = new mongoose.Schema({
 });
 const Mensaje = mongoose.model('Mensaje', mensajeSchema);
 
-// ---------- Preguntas frecuentes de Soporte Tecnico ----------
-// Puedes agregar mas preguntas y respuestas aqui. La pregunta debe escribirse
-// EXACTAMENTE igual en el archivo public/index.html (lista listaPreguntasFrecuentes).
-const NOMBRE_BOT = 'Soporte Tecnico 🤖';
+// ---------- Preguntas frecuentes por sala ----------
+// Puedes agregar mas preguntas y respuestas aqui. Cada pregunta debe escribirse
+// EXACTAMENTE igual en el archivo public/index.html (objeto preguntasPorSala).
+const NOMBRE_BOT_SOPORTE = 'Soporte Tecnico 🤖';
 const SALA_SOPORTE = 'Soporte Tecnico';
 
 const preguntasFrecuentes = {
@@ -70,6 +70,50 @@ const preguntasFrecuentes = {
     '3. Si el equipo no tiene esa opción configurada, se puede necesitar acceso físico al equipo para restablecerla.\n' +
     'Si no logras recuperarla con estos pasos, escribe aquí para que un asesor te guíe con más detalle.'
 };
+
+const NOMBRE_BOT_ASESORIA = 'Asesoría Técnica 🤖';
+const SALA_ASESORIA = 'Asesoria Tecnica';
+
+const preguntasAsesoria = {
+  '¿Qué computador me recomiendan comprar?':
+    'Depende del uso que le vayas a dar:\n' +
+    '- Uso basico (internet, redes sociales, documentos): un equipo con 8 GB de RAM y procesador Intel i3/i5 o AMD Ryzen 3/5 es suficiente.\n' +
+    '- Trabajo mas exigente (edicion, diseño, varios programas abiertos): busca 16 GB de RAM y procesador i5/i7 o Ryzen 5/7.\n' +
+    'Cuentanos tu presupuesto y para que lo vas a usar, y un asesor te da una recomendacion mas puntual.',
+
+  '¿Cómo elijo un buen plan de internet?':
+    '1. Para uso basico (redes sociales, whatsapp, correo) con 1-2 equipos: 20-50 Mbps es suficiente.\n' +
+    '2. Para streaming en varios equipos o trabajo desde casa: busca 100 Mbps o mas.\n' +
+    '3. Si varias personas usan internet al mismo tiempo, prioriza planes con buena velocidad de subida, no solo de bajada.\n' +
+    'Cuentanos cuantas personas y equipos usan el internet en tu casa para darte una recomendacion mas exacta.',
+
+  '¿Necesito antivirus pago o el gratis es suficiente?':
+    'Para la mayoria de usuarios en casa, el antivirus gratuito que trae Windows (Windows Defender) es suficiente si:\n' +
+    '1. Mantienes Windows actualizado.\n' +
+    '2. No descargas programas de paginas desconocidas.\n' +
+    '3. Tienes cuidado con los enlaces y archivos que llegan por correo o whatsapp.\n' +
+    'Si usas el equipo para trabajo con informacion sensible, un antivirus pago puede darte proteccion adicional.',
+
+  '¿Cada cuánto debo hacerle mantenimiento a mi equipo?':
+    'Recomendacion general:\n' +
+    '1. Limpieza de polvo interno: cada 6 meses (o cada 3 si el ambiente tiene mucho polvo).\n' +
+    '2. Revision de espacio en disco y archivos innecesarios: cada mes.\n' +
+    '3. Actualizaciones de Windows y antivirus: dejalas automaticas.\n' +
+    '4. Revision fisica completa por un tecnico: una vez al año.'
+};
+
+// ---------- Saludo automatico tipo mesa de ayuda (todas las salas) ----------
+const NOMBRE_BOT_SALUDO = 'Mesa de Ayuda 🤖';
+const saludos = ['hola', 'holaa', 'holaaa', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'hey', 'que tal', 'ola', 'buen dia', 'saludos'];
+
+function normalizarTexto(texto) {
+  return texto
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // quita tildes
+    .replace(/[¿?¡!.,]/g, ''); // quita signos de puntuacion
+}
 
 // Usuarios conectados por sala: { nombreSala: { socketId: nombreUsuario } }
 const usuariosPorSala = {};
@@ -120,27 +164,39 @@ io.on('connection', (socket) => {
 
     io.to(data.sala).emit('mensaje', nuevoMensaje);
 
-    // Si la pregunta coincide con una de soporte tecnico, el bot responde solo
-    if (data.sala === SALA_SOPORTE) {
-      const pregunta = data.texto.trim();
-      const respuesta = preguntasFrecuentes[pregunta];
-      if (respuesta) {
-        setTimeout(async () => {
-          const mensajeBot = {
-            sala: data.sala,
-            nombre: NOMBRE_BOT,
-            texto: respuesta,
-            tipo: 'texto',
-            hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
-          };
-          try {
-            await new Mensaje(mensajeBot).save();
-          } catch (err) {
-            console.error('Error guardando respuesta del bot:', err.message);
-          }
-          io.to(data.sala).emit('mensaje', mensajeBot);
-        }, 800);
-      }
+    // ---------- Respuestas automaticas ----------
+    let respuestaBot = null;
+    let nombreBot = null;
+    const textoExacto = data.texto.trim();
+    const textoNormalizado = normalizarTexto(data.texto);
+
+    if (data.sala === SALA_SOPORTE && preguntasFrecuentes[textoExacto]) {
+      respuestaBot = preguntasFrecuentes[textoExacto];
+      nombreBot = NOMBRE_BOT_SOPORTE;
+    } else if (data.sala === SALA_ASESORIA && preguntasAsesoria[textoExacto]) {
+      respuestaBot = preguntasAsesoria[textoExacto];
+      nombreBot = NOMBRE_BOT_ASESORIA;
+    } else if (data.tipo === 'texto' && saludos.includes(textoNormalizado)) {
+      respuestaBot = `¡Hola ${data.nombre}! Bienvenido a la sala "${data.sala}". ¿En qué te podemos ayudar hoy?`;
+      nombreBot = NOMBRE_BOT_SALUDO;
+    }
+
+    if (respuestaBot) {
+      setTimeout(async () => {
+        const mensajeBot = {
+          sala: data.sala,
+          nombre: nombreBot,
+          texto: respuestaBot,
+          tipo: 'texto',
+          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+        };
+        try {
+          await new Mensaje(mensajeBot).save();
+        } catch (err) {
+          console.error('Error guardando respuesta del bot:', err.message);
+        }
+        io.to(data.sala).emit('mensaje', mensajeBot);
+      }, 800);
     }
   });
 

@@ -318,7 +318,7 @@
     loginBox.style.display = 'none';
     chatContainer.style.display = 'flex';
     salaActualLabel.textContent = sala;
-    btnFaq.style.display = (sala === 'Soporte Tecnico') ? 'flex' : 'none';
+    mostrarFaqSiAplica(sala);
     inputMensaje.focus();
   }
 
@@ -329,7 +329,6 @@
     mensajesDiv.innerHTML = '';
     emojiPicker.style.display = 'none';
     faqPanel.style.display = 'none';
-    btnFaq.style.display = 'none';
     miSala = '';
     selectSala.value = 'General';
     inputSalaCustom.style.display = 'none';
@@ -372,28 +371,51 @@
   // ---------- Preguntas frecuentes (Soporte Tecnico) ----------
   // IMPORTANTE: cada texto debe ser IDENTICO a las llaves del objeto
   // "preguntasFrecuentes" en server.js, o el bot no va a reconocer la pregunta.
-  const listaPreguntasFrecuentes = [
-    'Se me apagó el equipo y no enciende',
-    'Mi computador está muy lento',
-    'No tengo conexión a internet o wifi',
-    'Olvidé mi contraseña de usuario en Windows'
-  ];
+  // IMPORTANTE: cada texto debe ser IDENTICO a las llaves de los objetos
+  // "preguntasFrecuentes" y "preguntasAsesoria" en server.js, o el bot no
+  // va a reconocer la pregunta.
+  const preguntasPorSala = {
+    'Soporte Tecnico': [
+      'Se me apagó el equipo y no enciende',
+      'Mi computador está muy lento',
+      'No tengo conexión a internet o wifi',
+      'Olvidé mi contraseña de usuario en Windows'
+    ],
+    'Asesoria Tecnica': [
+      '¿Qué computador me recomiendan comprar?',
+      '¿Cómo elijo un buen plan de internet?',
+      '¿Necesito antivirus pago o el gratis es suficiente?',
+      '¿Cada cuánto debo hacerle mantenimiento a mi equipo?'
+    ]
+  };
 
-  const tituloFaq = document.createElement('div');
-  tituloFaq.classList.add('faq-titulo');
-  tituloFaq.textContent = 'Elige tu problema:';
-  faqPanel.appendChild(tituloFaq);
+  function mostrarFaqSiAplica(sala) {
+    const preguntas = preguntasPorSala[sala];
+    faqPanel.innerHTML = '';
 
-  listaPreguntasFrecuentes.forEach((pregunta) => {
-    const boton = document.createElement('button');
-    boton.type = 'button';
-    boton.textContent = pregunta;
-    boton.addEventListener('click', () => {
-      socket.emit('mensaje', { nombre: miNombre, sala: miSala, texto: pregunta, tipo: 'texto' });
-      faqPanel.style.display = 'none';
+    if (!preguntas) {
+      btnFaq.style.display = 'none';
+      return;
+    }
+
+    btnFaq.style.display = 'flex';
+
+    const tituloFaq = document.createElement('div');
+    tituloFaq.classList.add('faq-titulo');
+    tituloFaq.textContent = 'Elige tu pregunta:';
+    faqPanel.appendChild(tituloFaq);
+
+    preguntas.forEach((pregunta) => {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.textContent = pregunta;
+      boton.addEventListener('click', () => {
+        socket.emit('mensaje', { nombre: miNombre, sala: miSala, texto: pregunta, tipo: 'texto' });
+        faqPanel.style.display = 'none';
+      });
+      faqPanel.appendChild(boton);
     });
-    faqPanel.appendChild(boton);
-  });
+  }
 
   btnFaq.addEventListener('click', () => {
     faqPanel.style.display = faqPanel.style.display === 'block' ? 'none' : 'block';
