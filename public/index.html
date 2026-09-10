@@ -76,6 +76,16 @@
     align-items: center;
   }
   #chat-header .sala-nombre { font-size: 14px; font-weight: normal; opacity: 0.85; }
+  #btn-menu {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #btn-menu:hover { background: rgba(255,255,255,0.25); }
 
   #mensajes {
     flex: 1;
@@ -208,6 +218,7 @@
 
 <div id="chat-container">
   <div id="chat-header">
+    <button id="btn-menu" title="Volver al menu">🏠 Menú</button>
     <span>Chat en linea</span>
     <span class="sala-nombre" id="sala-actual-label"></span>
   </div>
@@ -242,6 +253,7 @@
   const inputMensaje = document.getElementById('input-mensaje');
   const escribiendoIndicador = document.getElementById('escribiendo-indicador');
   const salaActualLabel = document.getElementById('sala-actual-label');
+  const btnMenu = document.getElementById('btn-menu');
   const btnEmoji = document.getElementById('btn-emoji');
   const emojiPicker = document.getElementById('emoji-picker');
   const btnImagen = document.getElementById('btn-imagen');
@@ -269,6 +281,18 @@
     salaActualLabel.textContent = sala;
     inputMensaje.focus();
   }
+
+  btnMenu.addEventListener('click', () => {
+    socket.emit('salir-sala', { nombre: miNombre, sala: miSala });
+    chatContainer.style.display = 'none';
+    loginBox.style.display = 'block';
+    mensajesDiv.innerHTML = '';
+    emojiPicker.style.display = 'none';
+    miSala = '';
+    selectSala.value = 'General';
+    inputSalaCustom.style.display = 'none';
+    inputSalaCustom.value = '';
+  });
 
   btnEntrar.addEventListener('click', entrarAlChat);
   inputNombre.addEventListener('keypress', (e) => {

@@ -91,6 +91,18 @@ io.on('connection', (socket) => {
     socket.to(sala).emit('escribiendo', nombre);
   });
 
+  // El usuario le da al boton de "Menu" y sale de la sala sin desconectarse
+  socket.on('salir-sala', ({ nombre, sala }) => {
+    socket.leave(sala);
+    if (usuariosPorSala[sala]) {
+      delete usuariosPorSala[sala][socket.id];
+      io.to(sala).emit('lista-usuarios', Object.values(usuariosPorSala[sala]));
+      io.to(sala).emit('mensaje-sistema', `${nombre} salio del chat`);
+    }
+    salaActual = null;
+    nombreActual = null;
+  });
+
   // Cuando alguien se desconecta
   socket.on('disconnect', () => {
     if (salaActual && usuariosPorSala[salaActual]) {
