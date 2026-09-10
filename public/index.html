@@ -196,6 +196,41 @@
     padding: 3px;
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
+
+  #faq-panel {
+    display: none;
+    position: absolute;
+    bottom: 60px;
+    left: 10px;
+    right: 10px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.15);
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 10;
+  }
+  #faq-panel .faq-titulo {
+    font-size: 12px;
+    color: #075e54;
+    font-weight: bold;
+    margin-bottom: 6px;
+  }
+  #faq-panel button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: #f0f0f0;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 5px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  #faq-panel button:hover { background: #dcf8c6; }
 </style>
 </head>
 <body>
@@ -226,8 +261,10 @@
   <div id="escribiendo-indicador"></div>
 
   <div id="emoji-picker"></div>
+  <div id="faq-panel"></div>
 
   <form id="form-mensaje">
+    <button type="button" class="btn-circular" id="btn-faq" title="Preguntas frecuentes" style="display:none;">❓</button>
     <button type="button" class="btn-circular" id="btn-emoji" title="Emojis">😊</button>
     <button type="button" class="btn-circular" id="btn-imagen" title="Enviar imagen">📷</button>
     <input type="file" id="input-imagen" accept="image/*" style="display:none;">
@@ -254,6 +291,8 @@
   const escribiendoIndicador = document.getElementById('escribiendo-indicador');
   const salaActualLabel = document.getElementById('sala-actual-label');
   const btnMenu = document.getElementById('btn-menu');
+  const btnFaq = document.getElementById('btn-faq');
+  const faqPanel = document.getElementById('faq-panel');
   const btnEmoji = document.getElementById('btn-emoji');
   const emojiPicker = document.getElementById('emoji-picker');
   const btnImagen = document.getElementById('btn-imagen');
@@ -279,6 +318,7 @@
     loginBox.style.display = 'none';
     chatContainer.style.display = 'flex';
     salaActualLabel.textContent = sala;
+    btnFaq.style.display = (sala === 'Soporte Tecnico') ? 'flex' : 'none';
     inputMensaje.focus();
   }
 
@@ -288,6 +328,8 @@
     loginBox.style.display = 'block';
     mensajesDiv.innerHTML = '';
     emojiPicker.style.display = 'none';
+    faqPanel.style.display = 'none';
+    btnFaq.style.display = 'none';
     miSala = '';
     selectSala.value = 'General';
     inputSalaCustom.style.display = 'none';
@@ -327,6 +369,36 @@
     emojiPicker.style.display = emojiPicker.style.display === 'flex' ? 'none' : 'flex';
   });
 
+  // ---------- Preguntas frecuentes (Soporte Tecnico) ----------
+  // IMPORTANTE: cada texto debe ser IDENTICO a las llaves del objeto
+  // "preguntasFrecuentes" en server.js, o el bot no va a reconocer la pregunta.
+  const listaPreguntasFrecuentes = [
+    'Se me apagó el equipo y no enciende',
+    'Mi computador está muy lento',
+    'No tengo conexión a internet o wifi',
+    'Olvidé mi contraseña de usuario en Windows'
+  ];
+
+  const tituloFaq = document.createElement('div');
+  tituloFaq.classList.add('faq-titulo');
+  tituloFaq.textContent = 'Elige tu problema:';
+  faqPanel.appendChild(tituloFaq);
+
+  listaPreguntasFrecuentes.forEach((pregunta) => {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.textContent = pregunta;
+    boton.addEventListener('click', () => {
+      socket.emit('mensaje', { nombre: miNombre, sala: miSala, texto: pregunta, tipo: 'texto' });
+      faqPanel.style.display = 'none';
+    });
+    faqPanel.appendChild(boton);
+  });
+
+  btnFaq.addEventListener('click', () => {
+    faqPanel.style.display = faqPanel.style.display === 'block' ? 'none' : 'block';
+  });
+
   // ---------- Imagenes ----------
   btnImagen.addEventListener('click', () => inputImagen.click());
 
@@ -363,7 +435,7 @@
     if (data.tipo === 'imagen') {
       contenidoHtml = `<img class="imagen-chat" src="${data.texto}" alt="imagen enviada">`;
     } else {
-      contenidoHtml = `<div class="texto">${escaparHTML(data.texto)}</div>`;
+      contenidoHtml = `<div class="texto">${escaparHTML(data.texto).replace(/\n/g, '<br>')}</div>`;
     }
 
     div.innerHTML = `

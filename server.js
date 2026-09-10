@@ -36,6 +36,41 @@ const mensajeSchema = new mongoose.Schema({
 });
 const Mensaje = mongoose.model('Mensaje', mensajeSchema);
 
+// ---------- Preguntas frecuentes de Soporte Tecnico ----------
+// Puedes agregar mas preguntas y respuestas aqui. La pregunta debe escribirse
+// EXACTAMENTE igual en el archivo public/index.html (lista listaPreguntasFrecuentes).
+const NOMBRE_BOT = 'Soporte Tecnico 🤖';
+const SALA_SOPORTE = 'Soporte Tecnico';
+
+const preguntasFrecuentes = {
+  'Se me apagó el equipo y no enciende':
+    '1. Desconecta el cable de energía del computador.\n' +
+    '2. Mantén presionado el botón de encendido (power) durante 15 segundos para liberar la energía estática.\n' +
+    '3. Vuelve a conectar el cable de energía.\n' +
+    '4. Presiona el botón de encendido (power) — el equipo debería encender normalmente.\n' +
+    'Si aún así no enciende, revisa que el cable y el tomacorriente funcionen probando con otro aparato.',
+
+  'Mi computador está muy lento':
+    '1. Cierra los programas y pestañas del navegador que no estés usando.\n' +
+    '2. Reinicia el equipo por completo (no solo cerrar sesión).\n' +
+    '3. Revisa cuánto espacio libre tienes en el disco duro; si está casi lleno, elimina archivos que no uses.\n' +
+    '4. Ejecuta el antivirus para descartar programas maliciosos.\n' +
+    'Si el problema continúa después de estos pasos, escribe aquí para que un asesor te ayude en detalle.',
+
+  'No tengo conexión a internet o wifi':
+    '1. Verifica que el wifi esté activado en tu equipo (icono de wifi en la barra de tareas).\n' +
+    '2. Reinicia el router: desconéctalo de la energía, espera 30 segundos y vuelve a conectarlo.\n' +
+    '3. Espera 1-2 minutos a que las luces del router se estabilicen.\n' +
+    '4. Intenta conectarte de nuevo a la red wifi con la contraseña correcta.\n' +
+    'Si otros equipos tampoco tienen internet, es probable que sea un problema del proveedor de internet.',
+
+  'Olvidé mi contraseña de usuario en Windows':
+    '1. En la pantalla de inicio de sesión, haz click en "¿Olvidaste tu contraseña?".\n' +
+    '2. Sigue las instrucciones para restablecerla usando tu correo o preguntas de seguridad asociadas a la cuenta.\n' +
+    '3. Si el equipo no tiene esa opción configurada, se puede necesitar acceso físico al equipo para restablecerla.\n' +
+    'Si no logras recuperarla con estos pasos, escribe aquí para que un asesor te guíe con más detalle.'
+};
+
 // Usuarios conectados por sala: { nombreSala: { socketId: nombreUsuario } }
 const usuariosPorSala = {};
 
@@ -84,6 +119,29 @@ io.on('connection', (socket) => {
     }
 
     io.to(data.sala).emit('mensaje', nuevoMensaje);
+
+    // Si la pregunta coincide con una de soporte tecnico, el bot responde solo
+    if (data.sala === SALA_SOPORTE) {
+      const pregunta = data.texto.trim();
+      const respuesta = preguntasFrecuentes[pregunta];
+      if (respuesta) {
+        setTimeout(async () => {
+          const mensajeBot = {
+            sala: data.sala,
+            nombre: NOMBRE_BOT,
+            texto: respuesta,
+            tipo: 'texto',
+            hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+          };
+          try {
+            await new Mensaje(mensajeBot).save();
+          } catch (err) {
+            console.error('Error guardando respuesta del bot:', err.message);
+          }
+          io.to(data.sala).emit('mensaje', mensajeBot);
+        }, 800);
+      }
+    }
   });
 
   // Indicador de "escribiendo..."
