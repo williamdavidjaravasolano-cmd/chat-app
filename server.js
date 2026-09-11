@@ -77,6 +77,44 @@ function formatoDatosTicket({ area, nombre, cargo, extension, incidencia }) {
   return `Área: ${area || 'N/A'}\nNombre: ${nombre}\nCargo: ${cargo || 'N/A'}\nExt: ${extension || 'N/A'}\nIncidencia: ${incidencia}`;
 }
 
+// ---------- IA en la nube (Groq, gratis) ----------
+// Se usa como respaldo cuando el bot no reconoce la pregunta con palabras clave.
+// Funciona siempre, sin depender de que tu PC este prendido.
+// GROQ_API_KEY se configura como variable de entorno en Render.
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+async function preguntarIA(pregunta) {
+  if (!GROQ_API_KEY) return null;
+  try {
+    const respuesta = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          {
+            role: 'system',
+            content: 'Eres un asistente de soporte tecnico. Responde en español, de forma breve y clara, usando pasos numerados cuando tenga sentido. No uses mas de 6 pasos.'
+          },
+          { role: 'user', content: pregunta }
+        ],
+        max_tokens: 500
+      }),
+      signal: AbortSignal.timeout(15000) // maximo 15 segundos de espera
+    });
+
+    if (!respuesta.ok) return null;
+    const datos = await respuesta.json();
+    return datos.choices && datos.choices[0] ? datos.choices[0].message.content.trim() : null;
+  } catch (err) {
+    console.error('Error consultando la IA (Groq):', err.message);
+    return null;
+  }
+}
+
 // ---------- Base de conocimiento aprendida de tickets resueltos ----------
 // Cada vez que se resuelve un ticket con el comando /resolver, se guarda aqui
 // para que quede disponible aunque el servidor se reinicie.
@@ -572,6 +610,37 @@ io.on('connection', (socket) => {
       nombreBot = NOMBRE_BOT_SALUDO;
     }
 
+    // Si nada de lo anterior respondio, probamos con la IA local antes de rendirnos
+    if (!respuestaBot && data.tipo === 'texto' && (data.sala === SALA_SOPORTE || data.sala === SALA_ASESORIA)) {
+      const respuestaIA = await preguntarIA(data.texto);
+      if (respuestaIA) {
+        try {
+          const numeroTicket = await generarNumeroTicket();
+          await new Ticket({
+            numero: numeroTicket,
+            categoria: 'Otros',
+            descripcion: data.texto,
+            nombre: data.nombre,
+            area: areaActual,
+            cargo: cargoActual,
+            extension: extActual,
+            sala: data.sala,
+            estado: 'En proceso',
+            historial: [{ estado: 'Creado' }, { estado: 'En proceso' }]
+          }).save();
+          numeroTicketGenerado = numeroTicket;
+          const datosTicket = formatoDatosTicket({ area: areaActual, nombre: data.nombre, cargo: cargoActual, extension: extActual, incidencia: data.texto });
+          respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${datosTicket}\n\n🤖 ${respuestaIA}`;
+        } catch (err) {
+          console.error('Error generando ticket para respuesta de IA:', err.message);
+          respuestaBot = `🤖 ${respuestaIA}`;
+        }
+        nombreBot = (data.sala === SALA_SOPORTE) ? NOMBRE_BOT_SOPORTE : NOMBRE_BOT_ASESORIA;
+        esFaq = true; // permite mostrar la encuesta de satisfaccion tambien en respuestas de la IA
+        preguntaCanonica = data.texto;
+      }
+    }
+
     if (respuestaBot) {
       setTimeout(async () => {
         const mensajeBot = {
@@ -596,7 +665,7 @@ io.on('connection', (socket) => {
   });
 
   // El usuario responde la encuesta de satisfaccion (👍 o 👎) de una respuesta del bot
-  socket.on('voto-respuesta', async ({ sala, pregunta, voto, nombre, numeroTicket }) => {
+  socket.on('voto-respuesta', async ({ sala, pregunta, voto, nombre, numeroTicket, respuestaTexto }) => {
     try {
       await new Voto({ sala, pregunta, voto, nombre }).save();
     } catch (err) {
@@ -613,7 +682,7 @@ io.on('connection', (socket) => {
           const itemEncontrado = listaBusqueda.find((it) => it.pregunta === pregunta);
 
           ticket.estado = 'Resuelto';
-          ticket.solucion = itemEncontrado ? itemEncontrado.respuesta : 'Confirmado como resuelto por el usuario.';
+          ticket.solucion = itemEncontrado ? itemEncontrado.respuesta : (respuestaTexto || 'Confirmado como resuelto por el usuario.');
           ticket.aprobadoParaConocimiento = true; // ya era una solucion conocida, no hace falta /aprobar
           ticket.historial.push({ estado: 'Resuelto' });
           await ticket.save();
