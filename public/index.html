@@ -197,7 +197,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -211,6 +211,9 @@
     max-height: 260px;
     overflow-y: auto;
     z-index: 10;
+  }
+  #opciones-panel {
+    max-height: 320px;
   }
   #opciones-panel button {
     display: flex;
@@ -386,6 +389,56 @@
     cursor: default;
   }
 
+  .tarjetas-resumen {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .tarjeta-numero {
+    flex: 1;
+    background: #f0f0f0;
+    border-radius: 8px;
+    padding: 10px 6px;
+    text-align: center;
+  }
+  .tarjeta-numero .numero {
+    font-size: 22px;
+    font-weight: bold;
+    color: #075e54;
+  }
+  .tarjeta-numero .etiqueta {
+    font-size: 10px;
+    color: #666;
+  }
+
+  .seccion-reporte {
+    margin-bottom: 14px;
+  }
+  .seccion-reporte h4 {
+    font-size: 13px;
+    color: #075e54;
+    margin: 0 0 6px 0;
+  }
+  .fila-barra {
+    margin-bottom: 6px;
+  }
+  .fila-barra .etiqueta-barra {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 2px;
+  }
+  .fondo-barra {
+    background: #eee;
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+  }
+  .relleno-barra {
+    background: #25d366;
+    height: 100%;
+  }
+
   .encuesta {
     margin-top: 6px;
     display: flex;
@@ -437,6 +490,7 @@
   <div id="tickets-panel"></div>
   <div id="panel-tecnico"></div>
   <div id="panel-ia"></div>
+  <div id="panel-reportes"></div>
   <div id="opciones-panel"></div>
 
   <form id="form-mensaje">
@@ -474,6 +528,7 @@
   const ticketsPanel = document.getElementById('tickets-panel');
   const panelTecnico = document.getElementById('panel-tecnico');
   const panelIA = document.getElementById('panel-ia');
+  const panelReportes = document.getElementById('panel-reportes');
 
   // Debe coincidir con la lista TECNICOS_AUTORIZADOS de server.js
   const EQUIPO_TECNICO = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Julian', 'Yin Carlos', 'William David', 'Henrry'];
@@ -520,6 +575,7 @@
     ticketsPanel.style.display = 'none';
     panelTecnico.style.display = 'none';
     panelIA.style.display = 'none';
+    panelReportes.style.display = 'none';
     opcionesPanel.style.display = 'none';
     btnOpciones.style.display = 'none';
     miSala = '';
@@ -558,7 +614,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -616,6 +672,7 @@
     if (esSoporteTecnico && esTecnicoActual()) {
       opciones.push({ icono: '🛠️', texto: 'Panel técnico', accion: () => abrirPanel(panelTecnico, () => socket.emit('obtener-todos-tickets')) });
       opciones.push({ icono: '🧠', texto: 'Respuestas de la IA', accion: () => abrirPanel(panelIA, () => socket.emit('obtener-respuestas-ia')) });
+      opciones.push({ icono: '📊', texto: 'Reportes', accion: () => abrirPanel(panelReportes, () => socket.emit('obtener-metricas')) });
     }
 
     if (preguntas) {
@@ -965,6 +1022,111 @@
 
   socket.on('faq-convertida', ({ pregunta }) => {
     // La confirmacion visual ya se hizo al hacer click; esto es solo para futuros usos
+  });
+
+  // ---------- Panel de reportes y metricas ----------
+  function construirBarras(contenedor, datos, colorClase) {
+    const total = Object.values(datos).reduce((suma, valor) => suma + valor, 0);
+    const entradas = Object.entries(datos).sort((a, b) => b[1] - a[1]);
+
+    entradas.forEach(([etiqueta, cantidad]) => {
+      const porcentaje = total > 0 ? Math.round((cantidad / total) * 100) : 0;
+
+      const fila = document.createElement('div');
+      fila.classList.add('fila-barra');
+      fila.innerHTML = `
+        <div class="etiqueta-barra">
+          <span>${escaparHTML(etiqueta)}</span>
+          <span>${cantidad}</span>
+        </div>
+        <div class="fondo-barra">
+          <div class="relleno-barra" style="width:${porcentaje}%;"></div>
+        </div>
+      `;
+      contenedor.appendChild(fila);
+    });
+  }
+
+  function construirPanelReportes(metricas) {
+    panelReportes.innerHTML = '';
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = 'Reportes y métricas';
+    panelReportes.appendChild(titulo);
+
+    if (!metricas) {
+      const error = document.createElement('div');
+      error.classList.add('faq-titulo');
+      error.textContent = 'No se pudieron cargar las métricas.';
+      panelReportes.appendChild(error);
+      agregarBotonVolver(panelReportes);
+      return;
+    }
+
+    // Tarjetas con los numeros principales
+    const tarjetas = document.createElement('div');
+    tarjetas.classList.add('tarjetas-resumen');
+    const datosTarjetas = [
+      { numero: metricas.totalTickets, etiqueta: 'Total tickets' },
+      { numero: metricas.totalResueltos, etiqueta: 'Resueltos' },
+      { numero: metricas.totalPendientes, etiqueta: 'Pendientes' }
+    ];
+    datosTarjetas.forEach((d) => {
+      const tarjeta = document.createElement('div');
+      tarjeta.classList.add('tarjeta-numero');
+      tarjeta.innerHTML = `<div class="numero">${d.numero}</div><div class="etiqueta">${d.etiqueta}</div>`;
+      tarjetas.appendChild(tarjeta);
+    });
+    panelReportes.appendChild(tarjetas);
+
+    // Tiempo promedio de resolucion
+    if (metricas.tiempoPromedioHoras !== null) {
+      const horas = metricas.tiempoPromedioHoras;
+      const textoTiempo = horas < 1
+        ? `${Math.round(horas * 60)} minutos`
+        : horas < 24
+          ? `${horas.toFixed(1)} horas`
+          : `${(horas / 24).toFixed(1)} días`;
+
+      const tiempo = document.createElement('div');
+      tiempo.classList.add('seccion-reporte');
+      tiempo.innerHTML = `<h4>⏱️ Tiempo promedio de resolución</h4><div style="font-size:18px; font-weight:bold; color:#075e54;">${textoTiempo}</div>`;
+      panelReportes.appendChild(tiempo);
+    }
+
+    // Por categoria
+    if (Object.keys(metricas.porCategoria).length > 0) {
+      const seccionCategoria = document.createElement('div');
+      seccionCategoria.classList.add('seccion-reporte');
+      seccionCategoria.innerHTML = '<h4>📂 Tickets por categoría</h4>';
+      construirBarras(seccionCategoria, metricas.porCategoria);
+      panelReportes.appendChild(seccionCategoria);
+    }
+
+    // Por estado
+    if (Object.keys(metricas.porEstado).length > 0) {
+      const seccionEstado = document.createElement('div');
+      seccionEstado.classList.add('seccion-reporte');
+      seccionEstado.innerHTML = '<h4>📌 Tickets por estado</h4>';
+      construirBarras(seccionEstado, metricas.porEstado);
+      panelReportes.appendChild(seccionEstado);
+    }
+
+    // Por tecnico
+    if (Object.keys(metricas.porTecnico).length > 0) {
+      const seccionTecnico = document.createElement('div');
+      seccionTecnico.classList.add('seccion-reporte');
+      seccionTecnico.innerHTML = '<h4>🧑‍💻 Casos resueltos por técnico</h4>';
+      construirBarras(seccionTecnico, metricas.porTecnico);
+      panelReportes.appendChild(seccionTecnico);
+    }
+
+    agregarBotonVolver(panelReportes);
+  }
+
+  socket.on('metricas', (metricas) => {
+    construirPanelReportes(metricas);
   });
 
   // ---------- Imagenes ----------

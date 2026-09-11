@@ -992,6 +992,65 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Calcula el resumen de metricas para el panel de reportes (solo tecnicos)
+  socket.on('obtener-metricas', async () => {
+    if (!esTecnicoAutorizado(nombreActual)) {
+      socket.emit('metricas', null);
+      return;
+    }
+    try {
+      const tickets = await Ticket.find({});
+      const totalTickets = tickets.length;
+      const resueltos = tickets.filter((t) => t.estado === 'Resuelto');
+      const totalResueltos = resueltos.length;
+      const totalPendientes = totalTickets - totalResueltos;
+
+      const porEstado = {};
+      tickets.forEach((t) => {
+        porEstado[t.estado] = (porEstado[t.estado] || 0) + 1;
+      });
+
+      const porCategoria = {};
+      tickets.forEach((t) => {
+        porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + 1;
+      });
+
+      const porTecnico = {};
+      resueltos.forEach((t) => {
+        const tecnico = t.tecnicoAsignado || 'Sin asignar';
+        porTecnico[tecnico] = (porTecnico[tecnico] || 0) + 1;
+      });
+
+      // Tiempo promedio de resolucion, calculado desde que se creo hasta que paso a "Resuelto"
+      let sumaHoras = 0;
+      let contadorConTiempo = 0;
+      resueltos.forEach((t) => {
+        const entradaResuelto = [...t.historial].reverse().find((h) => h.estado === 'Resuelto');
+        if (entradaResuelto) {
+          const diffMs = new Date(entradaResuelto.fecha) - new Date(t.fechaCreacion);
+          if (diffMs >= 0) {
+            sumaHoras += diffMs / (1000 * 60 * 60);
+            contadorConTiempo++;
+          }
+        }
+      });
+      const tiempoPromedioHoras = contadorConTiempo > 0 ? (sumaHoras / contadorConTiempo) : null;
+
+      socket.emit('metricas', {
+        totalTickets,
+        totalResueltos,
+        totalPendientes,
+        porEstado,
+        porCategoria,
+        porTecnico,
+        tiempoPromedioHoras
+      });
+    } catch (err) {
+      console.error('Error calculando metricas:', err.message);
+      socket.emit('metricas', null);
+    }
+  });
+
   // Indicador de "escribiendo..."
   socket.on('escribiendo', ({ nombre, sala }) => {
     socket.to(sala).emit('escribiendo', nombre);
