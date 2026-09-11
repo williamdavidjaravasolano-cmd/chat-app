@@ -344,19 +344,10 @@
 <body>
 
 <div id="login-box">
-  <h2>Entrar al chat</h2>
+  <h2>Soporte Técnico</h2>
   <input type="text" id="input-nombre" placeholder="Escribe tu nombre" maxlength="20">
 
-  <label for="select-sala">Elige una sala</label>
-  <select id="select-sala">
-    <option value="General">General</option>
-    <option value="Soporte Tecnico">Soporte tecnico</option>
-    <option value="Asesoria Tecnica">Asesoria tecnica</option>
-    <option value="__otra__">Otra sala...</option>
-  </select>
-  <input type="text" id="input-sala-custom" placeholder="Escribe el nombre de la sala" style="display:none;">
-
-  <div id="campos-soporte" style="display:none;">
+  <div id="campos-soporte">
     <input type="text" id="input-area" placeholder="Área (ej: Laboratorio)">
     <input type="text" id="input-cargo" placeholder="Cargo (ej: Enfermera jefe)">
     <input type="text" id="input-ext" placeholder="Extensión (ej: 1234)">
@@ -399,8 +390,6 @@
   const loginBox = document.getElementById('login-box');
   const chatContainer = document.getElementById('chat-container');
   const inputNombre = document.getElementById('input-nombre');
-  const selectSala = document.getElementById('select-sala');
-  const inputSalaCustom = document.getElementById('input-sala-custom');
   const camposSoporte = document.getElementById('campos-soporte');
   const inputArea = document.getElementById('input-area');
   const inputCargo = document.getElementById('input-cargo');
@@ -422,32 +411,23 @@
   const btnImagen = document.getElementById('btn-imagen');
   const inputImagen = document.getElementById('input-imagen');
 
-  selectSala.addEventListener('change', () => {
-    inputSalaCustom.style.display = selectSala.value === '__otra__' ? 'block' : 'none';
-    camposSoporte.style.display = selectSala.value === 'Soporte Tecnico' ? 'block' : 'none';
-  });
+  const SALA_UNICA = 'Soporte Tecnico';
 
   function entrarAlChat() {
     const nombre = inputNombre.value.trim();
     if (!nombre) return;
-
-    let sala = selectSala.value;
-    if (sala === '__otra__') {
-      sala = inputSalaCustom.value.trim();
-      if (!sala) return;
-    }
 
     const area = inputArea.value.trim();
     const cargo = inputCargo.value.trim();
     const ext = inputExt.value.trim();
 
     miNombre = nombre;
-    miSala = sala;
-    socket.emit('unirse-sala', { nombre, sala, area, cargo, ext });
+    miSala = SALA_UNICA;
+    socket.emit('unirse-sala', { nombre, sala: miSala, area, cargo, ext });
     loginBox.style.display = 'none';
     chatContainer.style.display = 'flex';
-    salaActualLabel.textContent = sala;
-    mostrarFaqSiAplica(sala);
+    salaActualLabel.textContent = miSala;
+    mostrarFaqSiAplica(miSala);
     inputMensaje.focus();
   }
 
@@ -463,10 +443,6 @@
     opcionesPanel.style.display = 'none';
     btnOpciones.style.display = 'none';
     miSala = '';
-    selectSala.value = 'General';
-    inputSalaCustom.style.display = 'none';
-    inputSalaCustom.value = '';
-    camposSoporte.style.display = 'none';
     inputArea.value = '';
     inputCargo.value = '';
     inputExt.value = '';
@@ -513,22 +489,15 @@
     emojiPicker.style.display = abrir ? 'flex' : 'none';
   });
 
-  // ---------- Preguntas frecuentes (Soporte Tecnico y Asesoria Tecnica) ----------
-  // IMPORTANTE: cada texto debe ser IDENTICO a las llaves de los objetos
-  // "preguntasFrecuentes" y "preguntasAsesoria" en server.js, o el bot no
-  // va a reconocer la pregunta.
+  // ---------- Preguntas frecuentes (Soporte Tecnico) ----------
+  // IMPORTANTE: cada texto debe ser IDENTICO a las llaves del objeto
+  // "preguntasFrecuentes" en server.js, o el bot no va a reconocer la pregunta.
   const preguntasPorSala = {
     'Soporte Tecnico': [
       'Se me apagó el equipo y no enciende',
       'Mi computador está muy lento',
       'No tengo conexión a internet o wifi',
       'Olvidé mi contraseña de usuario en Windows'
-    ],
-    'Asesoria Tecnica': [
-      '¿Qué computador me recomiendan comprar?',
-      '¿Cómo elijo un buen plan de internet?',
-      '¿Necesito antivirus pago o el gratis es suficiente?',
-      '¿Cada cuánto debo hacerle mantenimiento a mi equipo?'
     ]
   };
 
@@ -561,7 +530,6 @@
 
     if (esSoporteTecnico) {
       opciones.push({ icono: '🎫', texto: 'Crear ticket', accion: () => abrirPanel(ticketPanel, () => construirPanelTicket(false)) });
-      opciones.push({ icono: '🙋', texto: 'Hablar con un técnico', accion: () => abrirPanel(ticketPanel, () => construirPanelTicket(true)) });
       opciones.push({ icono: '📋', texto: 'Mis tickets', accion: () => abrirPanel(ticketsPanel, () => socket.emit('obtener-tickets', { nombre: miNombre })) });
     }
 
