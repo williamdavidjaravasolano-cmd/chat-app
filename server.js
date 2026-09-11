@@ -213,7 +213,11 @@ const saludos = ['hola', 'holaa', 'holaaa', 'buenas', 'buenos dias', 'buenas tar
 const frasesInsatisfaccion = [
   'no funciono', 'no me funciono', 'no me sirvio', 'no sirvio', 'sigue igual', 'sigue el problema',
   'no resolvio', 'no funciona', 'eso no funciono', 'no ayudo', 'no me ayudo', 'sigue sin funcionar',
-  'no se soluciono', 'no quedo resuelto', 'sigo con el mismo problema', 'no paso nada'
+  'no se soluciono', 'no quedo resuelto', 'sigo con el mismo problema', 'no paso nada',
+  'sigue lento', 'sigue lenta', 'aun lento', 'aun lenta', 'aun sigue', 'todavia lento', 'todavia lenta',
+  'no cambio nada', 'nada cambio', 'realice estos pasos', 'realice los pasos', 'hice estos pasos',
+  'hice los pasos', 'segui los pasos', 'segui estos pasos', 'ya intente eso', 'ya lo intente',
+  'sigue pasando', 'sigue fallando', 'sigue sin conexion', 'sigue sin internet'
 ];
 
 function normalizarTexto(texto) {
@@ -296,7 +300,7 @@ io.on('connection', (socket) => {
             const mensajeConfirmacion = {
               sala: data.sala,
               nombre: NOMBRE_BOT_SOPORTE,
-              texto: `✅ Ticket #${numeroTicket} marcado como resuelto.\nSi confirmas que esta solución funcionó bien, escribe:\n/aprobar ${numeroTicket}\npara agregarla a la base de conocimiento de la IA.`,
+              texto: `✅ El técnico marcó el ticket #${numeroTicket} como resuelto.\n\nSolución: ${solucion}\n\n¿Te funcionó? Si la confirmas, escribe: /aprobar ${numeroTicket}`,
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
@@ -405,7 +409,17 @@ io.on('connection', (socket) => {
     let preguntaCanonica = null;
     const textoNormalizado = normalizarTexto(data.texto);
 
-    if (data.sala === SALA_SOPORTE) {
+    // Primero revisamos si el mensaje indica que una respuesta anterior no funciono.
+    // Esto va ANTES de buscar en las preguntas frecuentes, porque frases como
+    // "sigue lento" contienen la misma palabra clave ("lento") que la pregunta
+    // original, y no queremos repetir la misma respuesta.
+    if (data.tipo === 'texto' && (data.sala === SALA_SOPORTE || data.sala === SALA_ASESORIA)
+        && frasesInsatisfaccion.some((frase) => textoNormalizado.includes(frase))) {
+      respuestaBot = `Entendido, ${data.nombre}. Un asesor va a contactarte pronto para ayudarte con este tema.`;
+      nombreBot = (data.sala === SALA_SOPORTE) ? NOMBRE_BOT_SOPORTE : NOMBRE_BOT_ASESORIA;
+    }
+
+    if (!respuestaBot && data.sala === SALA_SOPORTE) {
       const item = buscarPreguntaFaq(preguntasFrecuentes, textoNormalizado);
       if (item) {
         respuestaBot = item.respuesta;
@@ -413,7 +427,7 @@ io.on('connection', (socket) => {
         esFaq = true;
         preguntaCanonica = item.pregunta;
       }
-    } else if (data.sala === SALA_ASESORIA) {
+    } else if (!respuestaBot && data.sala === SALA_ASESORIA) {
       const item = buscarPreguntaFaq(preguntasAsesoria, textoNormalizado);
       if (item) {
         respuestaBot = item.respuesta;
@@ -426,13 +440,6 @@ io.on('connection', (socket) => {
     if (!respuestaBot && data.tipo === 'texto' && saludos.includes(textoNormalizado)) {
       respuestaBot = `¡Hola ${data.nombre}! Bienvenido a la sala "${data.sala}". ¿En qué te podemos ayudar hoy?`;
       nombreBot = NOMBRE_BOT_SALUDO;
-    }
-
-    // Si el usuario escribe que la respuesta anterior no le funciono, escalamos a un asesor
-    if (!respuestaBot && data.tipo === 'texto' && (data.sala === SALA_SOPORTE || data.sala === SALA_ASESORIA)
-        && frasesInsatisfaccion.some((frase) => textoNormalizado.includes(frase))) {
-      respuestaBot = `Entendido, ${data.nombre}. Un asesor va a contactarte pronto para ayudarte con este tema.`;
-      nombreBot = (data.sala === SALA_SOPORTE) ? NOMBRE_BOT_SOPORTE : NOMBRE_BOT_ASESORIA;
     }
 
     if (respuestaBot) {
@@ -488,17 +495,23 @@ io.on('connection', (socket) => {
   });
 
   // El usuario crea un ticket nuevo (categoria + descripcion del problema)
-  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion }) => {
+  // Si "escalar" es true, el usuario pidio hablar directo con un tecnico,
+  // sin que el bot intente responder automaticamente con el FAQ.
+  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion, escalar }) => {
     try {
       const numero = await generarNumeroTicket();
       const historial = [{ estado: 'Creado' }];
 
       // Si la descripcion coincide con una pregunta frecuente, damos una respuesta rapida
+      // (a menos que el usuario haya pedido escalar directo a un tecnico)
       const textoNormalizado = normalizarTexto(descripcion);
-      const item = buscarPreguntaFaq(preguntasFrecuentes, textoNormalizado);
+      const item = escalar ? null : buscarPreguntaFaq(preguntasFrecuentes, textoNormalizado);
 
       let estadoInicial = 'Creado';
-      if (item) {
+      if (escalar) {
+        estadoInicial = 'En espera';
+        historial.push({ estado: 'En espera' });
+      } else if (item) {
         estadoInicial = 'En proceso';
         historial.push({ estado: 'En proceso' });
       }
@@ -516,10 +529,14 @@ io.on('connection', (socket) => {
       socket.emit('ticket-creado', ticketGuardado);
 
       // Anunciamos el ticket en el chat de la sala
+      const textoAnuncio = escalar
+        ? `🙋 ${nombre} solicitó hablar con un técnico. Ticket #${numero} (${categoria}), en espera de atención.\nProblema: ${descripcion}`
+        : `🎫 Se creó el ticket #${numero} (${categoria}) para ${nombre}.\nProblema: ${descripcion}`;
+
       const mensajeTicket = {
         sala,
         nombre: NOMBRE_BOT_SOPORTE,
-        texto: `🎫 Se creó el ticket #${numero} (${categoria}) para ${nombre}.\nProblema: ${descripcion}`,
+        texto: textoAnuncio,
         tipo: 'texto',
         hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
       };

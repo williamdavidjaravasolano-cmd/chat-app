@@ -349,6 +349,7 @@
 
   <form id="form-mensaje">
     <button type="button" class="btn-circular" id="btn-ticket" title="Crear ticket" style="display:none;">🎫</button>
+    <button type="button" class="btn-circular" id="btn-escalar" title="Hablar con un técnico" style="display:none;">🙋</button>
     <button type="button" class="btn-circular" id="btn-mis-tickets" title="Mis tickets" style="display:none;">📋</button>
     <button type="button" class="btn-circular" id="btn-faq" title="Preguntas frecuentes" style="display:none;">❓</button>
     <button type="button" class="btn-circular" id="btn-emoji" title="Emojis">😊</button>
@@ -381,6 +382,7 @@
   const faqPanel = document.getElementById('faq-panel');
   const btnTicket = document.getElementById('btn-ticket');
   const ticketPanel = document.getElementById('ticket-panel');
+  const btnEscalar = document.getElementById('btn-escalar');
   const btnMisTickets = document.getElementById('btn-mis-tickets');
   const ticketsPanel = document.getElementById('tickets-panel');
   const btnEmoji = document.getElementById('btn-emoji');
@@ -421,6 +423,7 @@
     faqPanel.style.display = 'none';
     ticketPanel.style.display = 'none';
     ticketsPanel.style.display = 'none';
+    btnEscalar.style.display = 'none';
     miSala = '';
     selectSala.value = 'General';
     inputSalaCustom.style.display = 'none';
@@ -518,6 +521,7 @@
     // Los tickets solo aplican en la sala de Soporte Tecnico
     const esSoporteTecnico = (sala === 'Soporte Tecnico');
     btnTicket.style.display = esSoporteTecnico ? 'flex' : 'none';
+    btnEscalar.style.display = esSoporteTecnico ? 'flex' : 'none';
     btnMisTickets.style.display = esSoporteTecnico ? 'flex' : 'none';
   }
 
@@ -530,23 +534,23 @@
   // ---------- Sistema de tickets (Soporte Tecnico) ----------
   const categoriasTicket = ['💻 Equipos de cómputo', '🖨️ Impresoras', '📶 Red y conectividad', '💿 Software', '❔ Otros'];
 
-  function construirPanelTicket() {
+  function construirPanelTicket(escalar) {
     ticketPanel.innerHTML = '';
     const titulo = document.createElement('div');
     titulo.classList.add('faq-titulo');
-    titulo.textContent = 'Elige una categoría:';
+    titulo.textContent = escalar ? 'Vas a hablar con un técnico. Elige una categoría:' : 'Elige una categoría:';
     ticketPanel.appendChild(titulo);
 
     categoriasTicket.forEach((categoria) => {
       const boton = document.createElement('button');
       boton.type = 'button';
       boton.textContent = categoria;
-      boton.addEventListener('click', () => mostrarFormularioTicket(categoria));
+      boton.addEventListener('click', () => mostrarFormularioTicket(categoria, escalar));
       ticketPanel.appendChild(boton);
     });
   }
 
-  function mostrarFormularioTicket(categoria) {
+  function mostrarFormularioTicket(categoria, escalar) {
     ticketPanel.innerHTML = '';
     const titulo = document.createElement('div');
     titulo.classList.add('faq-titulo');
@@ -560,12 +564,12 @@
 
     const botonEnviar = document.createElement('button');
     botonEnviar.type = 'button';
-    botonEnviar.textContent = 'Crear ticket';
+    botonEnviar.textContent = escalar ? 'Enviar al técnico' : 'Crear ticket';
     botonEnviar.classList.add('boton-enviar-ticket');
     botonEnviar.addEventListener('click', () => {
       const descripcion = textarea.value.trim();
       if (!descripcion) return;
-      socket.emit('crear-ticket', { nombre: miNombre, sala: miSala, categoria, descripcion });
+      socket.emit('crear-ticket', { nombre: miNombre, sala: miSala, categoria, descripcion, escalar: !!escalar });
       ticketPanel.style.display = 'none';
     });
     ticketPanel.appendChild(botonEnviar);
@@ -574,7 +578,14 @@
   btnTicket.addEventListener('click', () => {
     const abrir = ticketPanel.style.display !== 'block';
     cerrarPaneles(ticketPanel);
-    if (abrir) construirPanelTicket();
+    if (abrir) construirPanelTicket(false);
+    ticketPanel.style.display = abrir ? 'block' : 'none';
+  });
+
+  btnEscalar.addEventListener('click', () => {
+    const abrir = ticketPanel.style.display !== 'block';
+    cerrarPaneles(ticketPanel);
+    if (abrir) construirPanelTicket(true);
     ticketPanel.style.display = abrir ? 'block' : 'none';
   });
 
