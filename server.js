@@ -544,6 +544,7 @@ io.on('connection', (socket) => {
           historial: [{ estado: 'Creado' }, { estado: 'En espera' }]
         }).save();
 
+        numeroTicketGenerado = numeroTicket;
         const datosTicket = formatoDatosTicket({ area: areaActual, nombre: data.nombre, cargo: cargoActual, extension: extActual, incidencia: descripcionTicket });
         respuestaBot = `Entendido, ${data.nombre}. Se generó el ticket #${numeroTicket}.\n\n${datosTicket}\n\nUn técnico va a contactarte por este mismo chat. Puedes revisar el estado en "Mis tickets" (menú ☰).`;
       } catch (err) {
@@ -556,27 +557,7 @@ io.on('connection', (socket) => {
     if (!respuestaBot && data.sala === SALA_SOPORTE) {
       const item = buscarPreguntaFaq(preguntasFrecuentes, textoNormalizado);
       if (item) {
-        try {
-          const numeroTicket = await generarNumeroTicket();
-          await new Ticket({
-            numero: numeroTicket,
-            categoria: 'Otros',
-            descripcion: item.pregunta,
-            nombre: data.nombre,
-            area: areaActual,
-            cargo: cargoActual,
-            extension: extActual,
-            sala: data.sala,
-            estado: 'En proceso',
-            historial: [{ estado: 'Creado' }, { estado: 'En proceso' }]
-          }).save();
-          numeroTicketGenerado = numeroTicket;
-          const datosTicket = formatoDatosTicket({ area: areaActual, nombre: data.nombre, cargo: cargoActual, extension: extActual, incidencia: item.pregunta });
-          respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${datosTicket}\n\n${item.respuesta}`;
-        } catch (err) {
-          console.error('Error generando ticket automatico de FAQ:', err.message);
-          respuestaBot = item.respuesta;
-        }
+        respuestaBot = item.respuesta;
         nombreBot = NOMBRE_BOT_SOPORTE;
         esFaq = true;
         preguntaCanonica = item.pregunta;
@@ -585,23 +566,7 @@ io.on('connection', (socket) => {
     } else if (!respuestaBot && data.sala === SALA_ASESORIA) {
       const item = buscarPreguntaFaq(preguntasAsesoria, textoNormalizado);
       if (item) {
-        try {
-          const numeroTicket = await generarNumeroTicket();
-          await new Ticket({
-            numero: numeroTicket,
-            categoria: 'Otros',
-            descripcion: item.pregunta,
-            nombre: data.nombre,
-            sala: data.sala,
-            estado: 'En proceso',
-            historial: [{ estado: 'Creado' }, { estado: 'En proceso' }]
-          }).save();
-          numeroTicketGenerado = numeroTicket;
-          respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${item.respuesta}`;
-        } catch (err) {
-          console.error('Error generando ticket automatico de FAQ:', err.message);
-          respuestaBot = item.respuesta;
-        }
+        respuestaBot = item.respuesta;
         nombreBot = NOMBRE_BOT_ASESORIA;
         esFaq = true;
         preguntaCanonica = item.pregunta;
@@ -615,38 +580,14 @@ io.on('connection', (socket) => {
     }
 
     // Si nada de lo anterior respondio, probamos con la IA antes de rendirnos
+    // (esto tampoco genera un ticket -- solo se responde la pregunta)
     if (!respuestaBot && data.tipo === 'texto' && (data.sala === SALA_SOPORTE || data.sala === SALA_ASESORIA)) {
       const respuestaIA = await preguntarIA(data.texto);
 
-      try {
-        const numeroTicket = await generarNumeroTicket();
-        const estadoTicket = respuestaIA ? 'En proceso' : 'En espera';
-        await new Ticket({
-          numero: numeroTicket,
-          categoria: 'Otros',
-          descripcion: data.texto,
-          nombre: data.nombre,
-          area: areaActual,
-          cargo: cargoActual,
-          extension: extActual,
-          sala: data.sala,
-          estado: estadoTicket,
-          historial: [{ estado: 'Creado' }, { estado: estadoTicket }]
-        }).save();
-        numeroTicketGenerado = numeroTicket;
-        const datosTicket = formatoDatosTicket({ area: areaActual, nombre: data.nombre, cargo: cargoActual, extension: extActual, incidencia: data.texto });
-
-        if (respuestaIA) {
-          respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${datosTicket}\n\n🤖 ${respuestaIA}`;
-        } else {
-          // La IA no respondio (fallo, tardo demasiado, o no esta configurada) -- avisamos igual
-          respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${datosTicket}\n\nNo encontré una respuesta automática para esto. Un técnico va a revisar tu caso pronto. Puedes ver el estado en "Mis tickets" (menú ☰).`;
-        }
-      } catch (err) {
-        console.error('Error generando ticket de respaldo:', err.message);
-        respuestaBot = respuestaIA
-          ? `🤖 ${respuestaIA}`
-          : `No encontré una respuesta automática para esto, ${data.nombre}. Un técnico va a contactarte pronto.`;
+      if (respuestaIA) {
+        respuestaBot = `🤖 ${respuestaIA}`;
+      } else {
+        respuestaBot = `No encontré una respuesta automática para esto, ${data.nombre}. Si el problema continúa, puedes escalarlo a un técnico con el botón 🙋 en el menú ☰.`;
       }
 
       nombreBot = (data.sala === SALA_SOPORTE) ? NOMBRE_BOT_SOPORTE : NOMBRE_BOT_ASESORIA;
