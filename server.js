@@ -235,6 +235,7 @@ const usuariosPorSala = {};
 io.on('connection', (socket) => {
   let salaActual = null;
   let nombreActual = null;
+  let ultimaPreguntaFaq = null; // guarda la ultima pregunta que el bot respondio, para crear tickets con contexto
 
   // El usuario elige nombre y sala al entrar
   socket.on('unirse-sala', async ({ nombre, sala }) => {
@@ -402,6 +403,59 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // ---------- Comando /tomar: el tecnico avisa que tomo el caso y esta trabajando en el ----------
+    // Se usa asi: /tomar T-4586
+    if (data.sala === SALA_SOPORTE && /^\/tomar\s+/i.test(data.texto.trim())) {
+      const match = data.texto.trim().match(/^\/tomar\s+(\S+)/i);
+
+      if (match) {
+        const numeroTicket = match[1].toUpperCase();
+
+        try {
+          const ticket = await Ticket.findOne({ numero: numeroTicket });
+
+          if (!ticket) {
+            const mensajeError = {
+              sala: data.sala,
+              nombre: NOMBRE_BOT_SOPORTE,
+              texto: `No encontré ningún ticket con el número ${numeroTicket}.`,
+              tipo: 'texto',
+              hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+            };
+            await new Mensaje(mensajeError).save();
+            io.to(data.sala).emit('mensaje', mensajeError);
+          } else if (ticket.estado === 'Resuelto') {
+            const mensajeYa = {
+              sala: data.sala,
+              nombre: NOMBRE_BOT_SOPORTE,
+              texto: `El ticket #${numeroTicket} ya está marcado como resuelto.`,
+              tipo: 'texto',
+              hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+            };
+            await new Mensaje(mensajeYa).save();
+            io.to(data.sala).emit('mensaje', mensajeYa);
+          } else {
+            ticket.estado = 'En proceso';
+            ticket.historial.push({ estado: 'En proceso' });
+            await ticket.save();
+
+            const mensajeTomado = {
+              sala: data.sala,
+              nombre: NOMBRE_BOT_SOPORTE,
+              texto: `🧑‍💻 Un técnico tomó el ticket #${numeroTicket} y está trabajando en tu caso, ${ticket.nombre}. Te avisamos aquí mismo apenas tengamos una solución.`,
+              tipo: 'texto',
+              hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+            };
+            await new Mensaje(mensajeTomado).save();
+            io.to(data.sala).emit('mensaje', mensajeTomado);
+          }
+        } catch (err) {
+          console.error('Error tomando ticket:', err.message);
+        }
+      }
+      return;
+    }
+
     // ---------- Respuestas automaticas ----------
     let respuestaBot = null;
     let nombreBot = null;
@@ -415,25 +469,75 @@ io.on('connection', (socket) => {
     // original, y no queremos repetir la misma respuesta.
     if (data.tipo === 'texto' && (data.sala === SALA_SOPORTE || data.sala === SALA_ASESORIA)
         && frasesInsatisfaccion.some((frase) => textoNormalizado.includes(frase))) {
-      respuestaBot = `Entendido, ${data.nombre}. Un asesor va a contactarte pronto para ayudarte con este tema.`;
+      try {
+        const numeroTicket = await generarNumeroTicket();
+        const descripcionTicket = ultimaPreguntaFaq || data.texto;
+
+        await new Ticket({
+          numero: numeroTicket,
+          categoria: 'Otros',
+          descripcion: descripcionTicket,
+          nombre: data.nombre,
+          sala: data.sala,
+          estado: 'En espera',
+          historial: [{ estado: 'Creado' }, { estado: 'En espera' }]
+        }).save();
+
+        respuestaBot = `Entendido, ${data.nombre}. Se generó el ticket #${numeroTicket} y un técnico va a contactarte por este mismo chat. Puedes revisar el estado en "Mis tickets" (menú ☰).`;
+      } catch (err) {
+        console.error('Error creando ticket automatico de escalamiento:', err.message);
+        respuestaBot = `Entendido, ${data.nombre}. Un asesor va a contactarte pronto para ayudarte con este tema.`;
+      }
       nombreBot = (data.sala === SALA_SOPORTE) ? NOMBRE_BOT_SOPORTE : NOMBRE_BOT_ASESORIA;
     }
 
     if (!respuestaBot && data.sala === SALA_SOPORTE) {
       const item = buscarPreguntaFaq(preguntasFrecuentes, textoNormalizado);
       if (item) {
-        respuestaBot = item.respuesta;
+        try {
+          const numeroTicket = await generarNumeroTicket();
+          await new Ticket({
+            numero: numeroTicket,
+            categoria: 'Otros',
+            descripcion: item.pregunta,
+            nombre: data.nombre,
+            sala: data.sala,
+            estado: 'En proceso',
+            historial: [{ estado: 'Creado' }, { estado: 'En proceso' }]
+          }).save();
+          respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${item.respuesta}`;
+        } catch (err) {
+          console.error('Error generando ticket automatico de FAQ:', err.message);
+          respuestaBot = item.respuesta;
+        }
         nombreBot = NOMBRE_BOT_SOPORTE;
         esFaq = true;
         preguntaCanonica = item.pregunta;
+        ultimaPreguntaFaq = item.pregunta;
       }
     } else if (!respuestaBot && data.sala === SALA_ASESORIA) {
       const item = buscarPreguntaFaq(preguntasAsesoria, textoNormalizado);
       if (item) {
-        respuestaBot = item.respuesta;
+        try {
+          const numeroTicket = await generarNumeroTicket();
+          await new Ticket({
+            numero: numeroTicket,
+            categoria: 'Otros',
+            descripcion: item.pregunta,
+            nombre: data.nombre,
+            sala: data.sala,
+            estado: 'En proceso',
+            historial: [{ estado: 'Creado' }, { estado: 'En proceso' }]
+          }).save();
+          respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${item.respuesta}`;
+        } catch (err) {
+          console.error('Error generando ticket automatico de FAQ:', err.message);
+          respuestaBot = item.respuesta;
+        }
         nombreBot = NOMBRE_BOT_ASESORIA;
         esFaq = true;
         preguntaCanonica = item.pregunta;
+        ultimaPreguntaFaq = item.pregunta;
       }
     }
 
