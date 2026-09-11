@@ -197,7 +197,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -212,6 +212,23 @@
     overflow-y: auto;
     z-index: 10;
   }
+  #opciones-panel button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: #f0f0f0;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 5px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #opciones-panel button:hover { background: #dcf8c6; }
+  #opciones-panel button .icono-opcion { font-size: 18px; }
+
   #faq-panel .faq-titulo, #ticket-panel .faq-titulo, #tickets-panel .faq-titulo {
     font-size: 12px;
     color: #075e54;
@@ -346,12 +363,10 @@
   <div id="faq-panel"></div>
   <div id="ticket-panel"></div>
   <div id="tickets-panel"></div>
+  <div id="opciones-panel"></div>
 
   <form id="form-mensaje">
-    <button type="button" class="btn-circular" id="btn-ticket" title="Crear ticket" style="display:none;">🎫</button>
-    <button type="button" class="btn-circular" id="btn-escalar" title="Hablar con un técnico" style="display:none;">🙋</button>
-    <button type="button" class="btn-circular" id="btn-mis-tickets" title="Mis tickets" style="display:none;">📋</button>
-    <button type="button" class="btn-circular" id="btn-faq" title="Preguntas frecuentes" style="display:none;">❓</button>
+    <button type="button" class="btn-circular" id="btn-opciones" title="Más opciones" style="display:none;">☰</button>
     <button type="button" class="btn-circular" id="btn-emoji" title="Emojis">😊</button>
     <button type="button" class="btn-circular" id="btn-imagen" title="Enviar imagen">📷</button>
     <input type="file" id="input-imagen" accept="image/*" style="display:none;">
@@ -378,13 +393,11 @@
   const escribiendoIndicador = document.getElementById('escribiendo-indicador');
   const salaActualLabel = document.getElementById('sala-actual-label');
   const btnMenu = document.getElementById('btn-menu');
-  const btnFaq = document.getElementById('btn-faq');
   const faqPanel = document.getElementById('faq-panel');
-  const btnTicket = document.getElementById('btn-ticket');
   const ticketPanel = document.getElementById('ticket-panel');
-  const btnEscalar = document.getElementById('btn-escalar');
-  const btnMisTickets = document.getElementById('btn-mis-tickets');
   const ticketsPanel = document.getElementById('tickets-panel');
+  const btnOpciones = document.getElementById('btn-opciones');
+  const opcionesPanel = document.getElementById('opciones-panel');
   const btnEmoji = document.getElementById('btn-emoji');
   const emojiPicker = document.getElementById('emoji-picker');
   const btnImagen = document.getElementById('btn-imagen');
@@ -423,7 +436,8 @@
     faqPanel.style.display = 'none';
     ticketPanel.style.display = 'none';
     ticketsPanel.style.display = 'none';
-    btnEscalar.style.display = 'none';
+    opcionesPanel.style.display = 'none';
+    btnOpciones.style.display = 'none';
     miSala = '';
     selectSala.value = 'General';
     inputSalaCustom.style.display = 'none';
@@ -460,7 +474,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -471,9 +485,7 @@
     emojiPicker.style.display = abrir ? 'flex' : 'none';
   });
 
-  // ---------- Preguntas frecuentes (Soporte Tecnico) ----------
-  // IMPORTANTE: cada texto debe ser IDENTICO a las llaves del objeto
-  // "preguntasFrecuentes" en server.js, o el bot no va a reconocer la pregunta.
+  // ---------- Preguntas frecuentes (Soporte Tecnico y Asesoria Tecnica) ----------
   // IMPORTANTE: cada texto debe ser IDENTICO a las llaves de los objetos
   // "preguntasFrecuentes" y "preguntasAsesoria" en server.js, o el bot no
   // va a reconocer la pregunta.
@@ -492,43 +504,67 @@
     ]
   };
 
-  function mostrarFaqSiAplica(sala) {
-    const preguntas = preguntasPorSala[sala];
+  function construirPanelFaq(preguntas) {
     faqPanel.innerHTML = '';
+    const tituloFaq = document.createElement('div');
+    tituloFaq.classList.add('faq-titulo');
+    tituloFaq.textContent = 'Elige tu pregunta:';
+    faqPanel.appendChild(tituloFaq);
 
-    if (!preguntas) {
-      btnFaq.style.display = 'none';
-    } else {
-      btnFaq.style.display = 'flex';
-
-      const tituloFaq = document.createElement('div');
-      tituloFaq.classList.add('faq-titulo');
-      tituloFaq.textContent = 'Elige tu pregunta:';
-      faqPanel.appendChild(tituloFaq);
-
-      preguntas.forEach((pregunta) => {
-        const boton = document.createElement('button');
-        boton.type = 'button';
-        boton.textContent = pregunta;
-        boton.addEventListener('click', () => {
-          socket.emit('mensaje', { nombre: miNombre, sala: miSala, texto: pregunta, tipo: 'texto' });
-          faqPanel.style.display = 'none';
-        });
-        faqPanel.appendChild(boton);
+    preguntas.forEach((pregunta) => {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.textContent = pregunta;
+      boton.addEventListener('click', () => {
+        socket.emit('mensaje', { nombre: miNombre, sala: miSala, texto: pregunta, tipo: 'texto' });
+        faqPanel.style.display = 'none';
       });
-    }
-
-    // Los tickets solo aplican en la sala de Soporte Tecnico
-    const esSoporteTecnico = (sala === 'Soporte Tecnico');
-    btnTicket.style.display = esSoporteTecnico ? 'flex' : 'none';
-    btnEscalar.style.display = esSoporteTecnico ? 'flex' : 'none';
-    btnMisTickets.style.display = esSoporteTecnico ? 'flex' : 'none';
+      faqPanel.appendChild(boton);
+    });
   }
 
-  btnFaq.addEventListener('click', () => {
-    const abrir = faqPanel.style.display !== 'block';
-    cerrarPaneles(faqPanel);
-    faqPanel.style.display = abrir ? 'block' : 'none';
+  // Arma el menu de "Más opciones" (☰) segun lo que aplique a la sala actual
+  function mostrarFaqSiAplica(sala) {
+    const preguntas = preguntasPorSala[sala];
+    const esSoporteTecnico = (sala === 'Soporte Tecnico');
+    const opciones = [];
+
+    if (esSoporteTecnico) {
+      opciones.push({ icono: '🎫', texto: 'Crear ticket', accion: () => abrirPanel(ticketPanel, () => construirPanelTicket(false)) });
+      opciones.push({ icono: '🙋', texto: 'Hablar con un técnico', accion: () => abrirPanel(ticketPanel, () => construirPanelTicket(true)) });
+      opciones.push({ icono: '📋', texto: 'Mis tickets', accion: () => abrirPanel(ticketsPanel, () => socket.emit('obtener-tickets', { nombre: miNombre })) });
+    }
+
+    if (preguntas) {
+      opciones.push({ icono: '❓', texto: 'Preguntas frecuentes', accion: () => abrirPanel(faqPanel, () => construirPanelFaq(preguntas)) });
+    }
+
+    opcionesPanel.innerHTML = '';
+    opciones.forEach((opcion) => {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.innerHTML = `<span class="icono-opcion">${opcion.icono}</span><span>${opcion.texto}</span>`;
+      boton.addEventListener('click', () => {
+        opcionesPanel.style.display = 'none';
+        opcion.accion();
+      });
+      opcionesPanel.appendChild(boton);
+    });
+
+    btnOpciones.style.display = opciones.length ? 'flex' : 'none';
+  }
+
+  // Abre uno de los paneles flotantes (ticket, tickets o faq), ejecutando "preparar" antes
+  function abrirPanel(panel, preparar) {
+    cerrarPaneles(panel);
+    if (preparar) preparar();
+    panel.style.display = 'block';
+  }
+
+  btnOpciones.addEventListener('click', () => {
+    const abrir = opcionesPanel.style.display !== 'block';
+    cerrarPaneles(opcionesPanel);
+    opcionesPanel.style.display = abrir ? 'block' : 'none';
   });
 
   // ---------- Sistema de tickets (Soporte Tecnico) ----------
@@ -574,20 +610,6 @@
     });
     ticketPanel.appendChild(botonEnviar);
   }
-
-  btnTicket.addEventListener('click', () => {
-    const abrir = ticketPanel.style.display !== 'block';
-    cerrarPaneles(ticketPanel);
-    if (abrir) construirPanelTicket(false);
-    ticketPanel.style.display = abrir ? 'block' : 'none';
-  });
-
-  btnEscalar.addEventListener('click', () => {
-    const abrir = ticketPanel.style.display !== 'block';
-    cerrarPaneles(ticketPanel);
-    if (abrir) construirPanelTicket(true);
-    ticketPanel.style.display = abrir ? 'block' : 'none';
-  });
 
   const coloresEstado = {
     'Creado': '#9e9e9e',
@@ -642,13 +664,6 @@
 
   socket.on('lista-tickets', (tickets) => {
     construirPanelTickets(tickets, 'Todos');
-  });
-
-  btnMisTickets.addEventListener('click', () => {
-    const abrir = ticketsPanel.style.display !== 'block';
-    cerrarPaneles(ticketsPanel);
-    if (abrir) socket.emit('obtener-tickets', { nombre: miNombre });
-    ticketsPanel.style.display = abrir ? 'block' : 'none';
   });
 
   // ---------- Imagenes ----------
