@@ -229,6 +229,15 @@
   #opciones-panel button:hover { background: #dcf8c6; }
   #opciones-panel button .icono-opcion { font-size: 18px; }
 
+  .boton-volver {
+    background: #e8e8e8 !important;
+    color: #075e54 !important;
+    font-weight: bold;
+    text-align: center !important;
+    justify-content: center;
+  }
+  .boton-volver:hover { background: #d5d5d5 !important; }
+
   #faq-panel .faq-titulo, #ticket-panel .faq-titulo, #tickets-panel .faq-titulo {
     font-size: 12px;
     color: #075e54;
@@ -540,6 +549,8 @@
       });
       faqPanel.appendChild(boton);
     });
+
+    agregarBotonVolver(faqPanel);
   }
 
   // Arma el menu de "Más opciones" (☰) segun lo que aplique a la sala actual
@@ -580,6 +591,22 @@
     panel.style.display = 'block';
   }
 
+  // Regresa del panel actual al menu de "Más opciones" (☰)
+  function volverAOpciones() {
+    cerrarPaneles(opcionesPanel);
+    opcionesPanel.style.display = 'block';
+  }
+
+  // Agrega el boton "← Volver al menú" al final de un panel
+  function agregarBotonVolver(panel) {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.textContent = '← Volver al menú';
+    boton.classList.add('boton-volver');
+    boton.addEventListener('click', volverAOpciones);
+    panel.appendChild(boton);
+  }
+
   btnOpciones.addEventListener('click', () => {
     const abrir = opcionesPanel.style.display !== 'block';
     cerrarPaneles(opcionesPanel);
@@ -603,6 +630,8 @@
       boton.addEventListener('click', () => mostrarFormularioTicket(categoria, escalar));
       ticketPanel.appendChild(boton);
     });
+
+    agregarBotonVolver(ticketPanel);
   }
 
   function mostrarFormularioTicket(categoria, escalar) {
@@ -628,6 +657,8 @@
       ticketPanel.style.display = 'none';
     });
     ticketPanel.appendChild(botonEnviar);
+
+    agregarBotonVolver(ticketPanel);
   }
 
   const coloresEstado = {
@@ -659,6 +690,7 @@
       vacio.classList.add('faq-titulo');
       vacio.textContent = 'No tienes tickets en esta categoría.';
       ticketsPanel.appendChild(vacio);
+      agregarBotonVolver(ticketsPanel);
       return;
     }
 
@@ -683,6 +715,8 @@
       `;
       ticketsPanel.appendChild(item);
     });
+
+    agregarBotonVolver(ticketsPanel);
   }
 
   socket.on('lista-tickets', (tickets) => {
@@ -753,7 +787,8 @@
             pregunta: data.preguntaOrigen,
             voto: boton.dataset.voto,
             nombre: miNombre,
-            numeroTicket: data.numeroTicket || null
+            numeroTicket: data.numeroTicket || null,
+            respuestaTexto: data.texto
           });
           votosRealizados.add(data._id);
           encuesta.innerHTML = '<span class="encuesta-texto">¡Gracias por tu opinión!</span>';
