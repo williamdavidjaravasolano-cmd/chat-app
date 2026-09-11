@@ -57,6 +57,7 @@ const ticketSchema = new mongoose.Schema({
   sala: String,
   estado: { type: String, default: 'Creado' }, // Creado, En proceso, En espera, Resuelto
   solucion: { type: String, default: null },
+  aprobadoParaConocimiento: { type: Boolean, default: false },
   historial: [{ estado: String, fecha: { type: Date, default: Date.now } }],
   fechaCreacion: { type: Date, default: Date.now }
 });
@@ -208,6 +209,13 @@ mongoose.connection.once('open', async () => {
 const NOMBRE_BOT_SALUDO = 'Mesa de Ayuda 🤖';
 const saludos = ['hola', 'holaa', 'holaaa', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'hey', 'que tal', 'ola', 'buen dia', 'saludos'];
 
+// Frases que indican que una respuesta anterior no funciono, para escalar a un asesor
+const frasesInsatisfaccion = [
+  'no funciono', 'no me funciono', 'no me sirvio', 'no sirvio', 'sigue igual', 'sigue el problema',
+  'no resolvio', 'no funciona', 'eso no funciono', 'no ayudo', 'no me ayudo', 'sigue sin funcionar',
+  'no se soluciono', 'no quedo resuelto', 'sigo con el mismo problema', 'no paso nada'
+];
+
 function normalizarTexto(texto) {
   return texto
     .trim()
@@ -285,26 +293,10 @@ io.on('connection', (socket) => {
             ticket.historial.push({ estado: 'Resuelto' });
             await ticket.save();
 
-            // Agregamos la solucion a la base de conocimiento para casos parecidos en el futuro
-            const textoDescripcion = normalizarTexto(ticket.descripcion);
-            const palabrasClave = Array.from(new Set(
-              [textoDescripcion, ...textoDescripcion.split(' ').filter((palabra) => palabra.length > 3)]
-            ));
-
-            preguntasFrecuentes.push({ pregunta: ticket.descripcion, palabrasClave, respuesta: solucion });
-
-            await new Conocimiento({
-              sala: SALA_SOPORTE,
-              pregunta: ticket.descripcion,
-              palabrasClave,
-              respuesta: solucion,
-              ticketOrigen: numeroTicket
-            }).save();
-
             const mensajeConfirmacion = {
               sala: data.sala,
               nombre: NOMBRE_BOT_SOPORTE,
-              texto: `✅ Ticket #${numeroTicket} marcado como resuelto. Esta solución ahora forma parte de la base de conocimiento y se usará automáticamente para casos parecidos.`,
+              texto: `✅ Ticket #${numeroTicket} marcado como resuelto.\nSi confirmas que esta solución funcionó bien, escribe:\n/aprobar ${numeroTicket}\npara agregarla a la base de conocimiento de la IA.`,
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
@@ -326,6 +318,84 @@ io.on('connection', (socket) => {
         }
       }
       return; // ya se manejo este mensaje como comando, no seguimos con FAQ/saludo
+    }
+
+    // ---------- Comando /aprobar: da el visto bueno final y agrega la solucion a la IA ----------
+    // Se usa asi: /aprobar T-4581
+    if (data.sala === SALA_SOPORTE && /^\/aprobar\s+/i.test(data.texto.trim())) {
+      const match = data.texto.trim().match(/^\/aprobar\s+(\S+)/i);
+
+      if (match) {
+        const numeroTicket = match[1].toUpperCase();
+
+        try {
+          const ticket = await Ticket.findOne({ numero: numeroTicket });
+
+          if (!ticket) {
+            const mensajeError = {
+              sala: data.sala,
+              nombre: NOMBRE_BOT_SOPORTE,
+              texto: `No encontré ningún ticket con el número ${numeroTicket}.`,
+              tipo: 'texto',
+              hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+            };
+            await new Mensaje(mensajeError).save();
+            io.to(data.sala).emit('mensaje', mensajeError);
+          } else if (ticket.estado !== 'Resuelto' || !ticket.solucion) {
+            const mensajeError = {
+              sala: data.sala,
+              nombre: NOMBRE_BOT_SOPORTE,
+              texto: `El ticket #${numeroTicket} todavía no tiene una solución registrada. Primero usa /resolver ${numeroTicket} <la solución>.`,
+              tipo: 'texto',
+              hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+            };
+            await new Mensaje(mensajeError).save();
+            io.to(data.sala).emit('mensaje', mensajeError);
+          } else if (ticket.aprobadoParaConocimiento) {
+            const mensajeYa = {
+              sala: data.sala,
+              nombre: NOMBRE_BOT_SOPORTE,
+              texto: `El ticket #${numeroTicket} ya había sido aprobado anteriormente.`,
+              tipo: 'texto',
+              hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+            };
+            await new Mensaje(mensajeYa).save();
+            io.to(data.sala).emit('mensaje', mensajeYa);
+          } else {
+            ticket.aprobadoParaConocimiento = true;
+            await ticket.save();
+
+            // Agregamos la solucion aprobada a la base de conocimiento para casos parecidos
+            const textoDescripcion = normalizarTexto(ticket.descripcion);
+            const palabrasClave = Array.from(new Set(
+              [textoDescripcion, ...textoDescripcion.split(' ').filter((palabra) => palabra.length > 3)]
+            ));
+
+            preguntasFrecuentes.push({ pregunta: ticket.descripcion, palabrasClave, respuesta: ticket.solucion });
+
+            await new Conocimiento({
+              sala: SALA_SOPORTE,
+              pregunta: ticket.descripcion,
+              palabrasClave,
+              respuesta: ticket.solucion,
+              ticketOrigen: numeroTicket
+            }).save();
+
+            const mensajeAprobado = {
+              sala: data.sala,
+              nombre: NOMBRE_BOT_SOPORTE,
+              texto: `🧠 Solución del ticket #${numeroTicket} aprobada y agregada a la base de conocimiento. A partir de ahora se usará automáticamente para casos parecidos.`,
+              tipo: 'texto',
+              hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+            };
+            await new Mensaje(mensajeAprobado).save();
+            io.to(data.sala).emit('mensaje', mensajeAprobado);
+          }
+        } catch (err) {
+          console.error('Error aprobando ticket:', err.message);
+        }
+      }
+      return;
     }
 
     // ---------- Respuestas automaticas ----------
@@ -356,6 +426,13 @@ io.on('connection', (socket) => {
     if (!respuestaBot && data.tipo === 'texto' && saludos.includes(textoNormalizado)) {
       respuestaBot = `¡Hola ${data.nombre}! Bienvenido a la sala "${data.sala}". ¿En qué te podemos ayudar hoy?`;
       nombreBot = NOMBRE_BOT_SALUDO;
+    }
+
+    // Si el usuario escribe que la respuesta anterior no le funciono, escalamos a un asesor
+    if (!respuestaBot && data.tipo === 'texto' && (data.sala === SALA_SOPORTE || data.sala === SALA_ASESORIA)
+        && frasesInsatisfaccion.some((frase) => textoNormalizado.includes(frase))) {
+      respuestaBot = `Entendido, ${data.nombre}. Un asesor va a contactarte pronto para ayudarte con este tema.`;
+      nombreBot = (data.sala === SALA_SOPORTE) ? NOMBRE_BOT_SOPORTE : NOMBRE_BOT_ASESORIA;
     }
 
     if (respuestaBot) {
