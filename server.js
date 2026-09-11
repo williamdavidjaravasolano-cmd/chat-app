@@ -78,6 +78,16 @@ function formatoDatosTicket({ area, nombre, cargo, extension, incidencia }) {
   return `Área: ${area || 'N/A'}\nNombre: ${nombre}\nCargo: ${cargo || 'N/A'}\nExt: ${extension || 'N/A'}\nIncidencia: ${incidencia}`;
 }
 
+// ---------- Tecnicos autorizados ----------
+// Solo estos nombres (tal como los escriben al entrar al chat) pueden usar
+// los comandos /tomar, /resolver y /aprobar. Agrega o quita nombres aqui.
+const TECNICOS_AUTORIZADOS = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Julian', 'Yin Carlos', 'William David', 'Henrry'];
+
+function esTecnicoAutorizado(nombre) {
+  const normalizado = normalizarTexto(nombre || '');
+  return TECNICOS_AUTORIZADOS.some((tecnico) => normalizarTexto(tecnico) === normalizado);
+}
+
 // ---------- IA en la nube (Groq, gratis) ----------
 // Se usa como respaldo cuando el bot no reconoce la pregunta con palabras clave.
 // Funciona siempre, sin depender de que tu PC este prendido.
@@ -341,6 +351,18 @@ io.on('connection', (socket) => {
     // Se usa asi, escrito directo en el chat de Soporte Tecnico:
     // /resolver T-4581 La solucion fue reiniciar el switch de red del piso 2.
     if (data.sala === SALA_SOPORTE && /^\/resolver\s+/i.test(data.texto.trim())) {
+      if (!esTecnicoAutorizado(data.nombre)) {
+        const mensajeSinPermiso = {
+          sala: data.sala,
+          nombre: NOMBRE_BOT_SOPORTE,
+          texto: `${data.nombre}, no tienes permiso para usar este comando. Solo el equipo técnico puede resolver tickets.`,
+          tipo: 'texto',
+          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+        };
+        await new Mensaje(mensajeSinPermiso).save();
+        io.to(data.sala).emit('mensaje', mensajeSinPermiso);
+        return;
+      }
       const match = data.texto.trim().match(/^\/resolver\s+(\S+)\s+([\s\S]+)$/i);
 
       if (match) {
@@ -387,6 +409,18 @@ io.on('connection', (socket) => {
     // ---------- Comando /aprobar: da el visto bueno final y agrega la solucion a la IA ----------
     // Se usa asi: /aprobar T-4581
     if (data.sala === SALA_SOPORTE && /^\/aprobar\s+/i.test(data.texto.trim())) {
+      if (!esTecnicoAutorizado(data.nombre)) {
+        const mensajeSinPermiso = {
+          sala: data.sala,
+          nombre: NOMBRE_BOT_SOPORTE,
+          texto: `${data.nombre}, no tienes permiso para usar este comando. Solo el equipo técnico puede aprobar soluciones.`,
+          tipo: 'texto',
+          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+        };
+        await new Mensaje(mensajeSinPermiso).save();
+        io.to(data.sala).emit('mensaje', mensajeSinPermiso);
+        return;
+      }
       const match = data.texto.trim().match(/^\/aprobar\s+(\S+)/i);
 
       if (match) {
@@ -465,6 +499,18 @@ io.on('connection', (socket) => {
     // ---------- Comando /tomar: el tecnico avisa que tomo el caso y esta trabajando en el ----------
     // Se usa asi: /tomar T-4586
     if (data.sala === SALA_SOPORTE && /^\/tomar\s+/i.test(data.texto.trim())) {
+      if (!esTecnicoAutorizado(data.nombre)) {
+        const mensajeSinPermiso = {
+          sala: data.sala,
+          nombre: NOMBRE_BOT_SOPORTE,
+          texto: `${data.nombre}, no tienes permiso para usar este comando. Solo el equipo técnico puede tomar casos.`,
+          tipo: 'texto',
+          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+        };
+        await new Mensaje(mensajeSinPermiso).save();
+        io.to(data.sala).emit('mensaje', mensajeSinPermiso);
+        return;
+      }
       const match = data.texto.trim().match(/^\/tomar\s+(\S+)/i);
 
       if (match) {
