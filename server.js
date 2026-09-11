@@ -92,10 +92,10 @@ const preguntasFrecuentes = [
     pregunta: 'Olvidé mi contraseña de usuario en Windows',
     palabrasClave: ['olvide mi contraseña', 'se me olvido la clave', 'no recuerdo la contraseña', 'perdi la contraseña', 'clave de windows', 'no recuerdo la clave', 'olvide la clave'],
     respuesta:
-      '1. En la pantalla de inicio de sesión, haz click en "¿Olvidaste tu contraseña?".\n' +
-      '2. Sigue las instrucciones para restablecerla usando tu correo o preguntas de seguridad asociadas a la cuenta.\n' +
-      '3. Si el equipo no tiene esa opción configurada, se puede necesitar acceso físico al equipo para restablecerla.\n' +
-      'Si no logras recuperarla con estos pasos, escribe aquí para que un asesor te guíe con más detalle.'
+      '1. Verifica que la tecla "Bloq Mayús" (Caps Lock) no esté activada, ya que esto cambia mayúsculas y minúsculas al escribir la contraseña.\n' +
+      '2. Confirma que estás escribiendo el nombre de usuario correcto (a veces hay más de un usuario creado en el mismo equipo).\n' +
+      '3. Intenta con las contraseñas que uses habitualmente, por si la escribiste mal o la confundiste con otra.\n' +
+      'Si nada de esto funciona, restablecer la contraseña normalmente requiere el acceso de un administrador del equipo. Escribe aquí para que un asesor te ayude directamente.'
   }
 ];
 
