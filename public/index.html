@@ -197,7 +197,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -320,6 +320,40 @@
     margin-top: 4px;
   }
 
+  .acciones-tecnico {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .acciones-tecnico button {
+    flex: 1;
+    min-width: 80px;
+    font-size: 12px;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: white;
+  }
+  .btn-tomar { background: #2196f3; }
+  .btn-resolver-accion { background: #ff9800; }
+  .btn-aprobar-accion { background: #4caf50; }
+
+  .form-resolver-inline {
+    margin-top: 8px;
+  }
+  .form-resolver-inline textarea {
+    width: 100%;
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-family: inherit;
+    font-size: 12px;
+    margin-bottom: 5px;
+    resize: vertical;
+  }
+
   .encuesta {
     margin-top: 6px;
     display: flex;
@@ -369,6 +403,7 @@
   <div id="faq-panel"></div>
   <div id="ticket-panel"></div>
   <div id="tickets-panel"></div>
+  <div id="panel-tecnico"></div>
   <div id="opciones-panel"></div>
 
   <form id="form-mensaje">
@@ -404,6 +439,14 @@
   const faqPanel = document.getElementById('faq-panel');
   const ticketPanel = document.getElementById('ticket-panel');
   const ticketsPanel = document.getElementById('tickets-panel');
+  const panelTecnico = document.getElementById('panel-tecnico');
+
+  // Debe coincidir con la lista TECNICOS_AUTORIZADOS de server.js
+  const EQUIPO_TECNICO = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Julian', 'Yin Carlos', 'William David', 'Henrry'];
+  function esTecnicoActual() {
+    const normalizado = miNombre.trim().toLowerCase();
+    return EQUIPO_TECNICO.some((tecnico) => tecnico.toLowerCase() === normalizado);
+  }
   const btnOpciones = document.getElementById('btn-opciones');
   const opcionesPanel = document.getElementById('opciones-panel');
   const btnEmoji = document.getElementById('btn-emoji');
@@ -440,6 +483,7 @@
     faqPanel.style.display = 'none';
     ticketPanel.style.display = 'none';
     ticketsPanel.style.display = 'none';
+    panelTecnico.style.display = 'none';
     opcionesPanel.style.display = 'none';
     btnOpciones.style.display = 'none';
     miSala = '';
@@ -478,7 +522,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -531,6 +575,10 @@
     if (esSoporteTecnico) {
       opciones.push({ icono: '🎫', texto: 'Crear ticket', accion: () => abrirPanel(ticketPanel, () => construirPanelTicket(false)) });
       opciones.push({ icono: '📋', texto: 'Mis tickets', accion: () => abrirPanel(ticketsPanel, () => socket.emit('obtener-tickets', { nombre: miNombre })) });
+    }
+
+    if (esSoporteTecnico && esTecnicoActual()) {
+      opciones.push({ icono: '🛠️', texto: 'Panel técnico', accion: () => abrirPanel(panelTecnico, () => socket.emit('obtener-todos-tickets')) });
     }
 
     if (preguntas) {
@@ -693,6 +741,135 @@
 
   socket.on('lista-tickets', (tickets) => {
     construirPanelTickets(tickets, 'Todos');
+  });
+
+  // ---------- Panel de tecnico ----------
+  let ultimosTicketsTecnico = [];
+
+  function construirPanelTecnico(tickets, filtro) {
+    ultimosTicketsTecnico = tickets;
+    panelTecnico.innerHTML = '';
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = 'Panel técnico — todos los casos';
+    panelTecnico.appendChild(titulo);
+
+    const filtros = document.createElement('div');
+    filtros.classList.add('filtros-tickets');
+    ['Todos', 'Creado', 'En proceso', 'En espera', 'Resuelto'].forEach((nombreFiltro) => {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.textContent = nombreFiltro;
+      if (filtro === nombreFiltro) boton.classList.add('activo');
+      boton.addEventListener('click', () => construirPanelTecnico(tickets, nombreFiltro));
+      filtros.appendChild(boton);
+    });
+    panelTecnico.appendChild(filtros);
+
+    const ticketsFiltrados = (filtro === 'Todos') ? tickets : tickets.filter((t) => t.estado === filtro);
+
+    if (ticketsFiltrados.length === 0) {
+      const vacio = document.createElement('div');
+      vacio.classList.add('faq-titulo');
+      vacio.textContent = 'No hay tickets en esta categoría.';
+      panelTecnico.appendChild(vacio);
+      agregarBotonVolver(panelTecnico);
+      return;
+    }
+
+    ticketsFiltrados.forEach((ticket) => {
+      const item = document.createElement('div');
+      item.classList.add('item-ticket');
+      const color = coloresEstado[ticket.estado] || '#999';
+      const solucionHtml = ticket.solucion
+        ? `<div class="descripcion-ticket"><strong>Solución:</strong> ${escaparHTML(ticket.solucion)}</div>`
+        : '';
+      const datosHtml = (ticket.area || ticket.cargo || ticket.extension)
+        ? `<div class="descripcion-ticket">Área: ${escaparHTML(ticket.area || 'N/A')} · Cargo: ${escaparHTML(ticket.cargo || 'N/A')} · Ext: ${escaparHTML(ticket.extension || 'N/A')}</div>`
+        : '';
+      const tecnicoHtml = ticket.tecnicoAsignado
+        ? `<div class="descripcion-ticket">🧑‍💻 <strong>Atendido por:</strong> ${escaparHTML(ticket.tecnicoAsignado)}</div>`
+        : `<div class="descripcion-ticket" style="color:#999;">⏳ Aún nadie ha tomado este caso.</div>`;
+
+      item.innerHTML = `
+        <div class="fila-superior">
+          <strong>#${escaparHTML(ticket.numero)} — ${escaparHTML(ticket.categoria)}</strong>
+          <span class="badge-estado" style="background:${color};">${escaparHTML(ticket.estado)}</span>
+        </div>
+        <div class="descripcion-ticket"><strong>De:</strong> ${escaparHTML(ticket.nombre)}</div>
+        <div class="descripcion-ticket">${escaparHTML(ticket.descripcion)}</div>
+        ${datosHtml}
+        ${tecnicoHtml}
+        ${solucionHtml}
+      `;
+
+      const acciones = document.createElement('div');
+      acciones.classList.add('acciones-tecnico');
+
+      if (ticket.estado !== 'Resuelto') {
+        const botonTomar = document.createElement('button');
+        botonTomar.type = 'button';
+        botonTomar.classList.add('btn-tomar');
+        botonTomar.textContent = '🧑‍💻 Tomar';
+        botonTomar.addEventListener('click', () => {
+          socket.emit('tomar-ticket-boton', { numero: ticket.numero });
+        });
+        acciones.appendChild(botonTomar);
+
+        const botonResolver = document.createElement('button');
+        botonResolver.type = 'button';
+        botonResolver.classList.add('btn-resolver-accion');
+        botonResolver.textContent = '✅ Resolver';
+        botonResolver.addEventListener('click', () => mostrarFormularioResolver(item, ticket.numero));
+        acciones.appendChild(botonResolver);
+      } else if (!ticket.aprobadoParaConocimiento) {
+        const botonAprobar = document.createElement('button');
+        botonAprobar.type = 'button';
+        botonAprobar.classList.add('btn-aprobar-accion');
+        botonAprobar.textContent = '🧠 Aprobar para la IA';
+        botonAprobar.addEventListener('click', () => {
+          socket.emit('aprobar-ticket-boton', { numero: ticket.numero });
+        });
+        acciones.appendChild(botonAprobar);
+      }
+
+      if (acciones.children.length > 0) item.appendChild(acciones);
+      panelTecnico.appendChild(item);
+    });
+
+    agregarBotonVolver(panelTecnico);
+  }
+
+  function mostrarFormularioResolver(item, numeroTicket) {
+    // Si ya hay un formulario abierto en este item, no duplicar
+    if (item.querySelector('.form-resolver-inline')) return;
+
+    const form = document.createElement('div');
+    form.classList.add('form-resolver-inline');
+
+    const textarea = document.createElement('textarea');
+    textarea.rows = 2;
+    textarea.placeholder = 'Escribe la solución...';
+    form.appendChild(textarea);
+
+    const botonConfirmar = document.createElement('button');
+    botonConfirmar.type = 'button';
+    botonConfirmar.classList.add('btn-resolver-accion');
+    botonConfirmar.textContent = 'Confirmar solución';
+    botonConfirmar.style.width = '100%';
+    botonConfirmar.addEventListener('click', () => {
+      const solucion = textarea.value.trim();
+      if (!solucion) return;
+      socket.emit('resolver-ticket-boton', { numero: numeroTicket, solucion });
+    });
+    form.appendChild(botonConfirmar);
+
+    item.appendChild(form);
+  }
+
+  socket.on('lista-todos-tickets', (tickets) => {
+    construirPanelTecnico(tickets, 'Todos');
   });
 
   // ---------- Imagenes ----------

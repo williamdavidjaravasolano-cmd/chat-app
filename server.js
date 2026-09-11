@@ -815,6 +815,124 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ---------- Panel de tecnico ----------
+  // Solo tecnicos autorizados pueden pedir la lista completa de tickets (de todos los usuarios)
+  socket.on('obtener-todos-tickets', async () => {
+    if (!esTecnicoAutorizado(nombreActual)) {
+      socket.emit('lista-todos-tickets', []);
+      return;
+    }
+    try {
+      const tickets = await Ticket.find({}).sort({ fechaCreacion: -1 });
+      socket.emit('lista-todos-tickets', tickets);
+    } catch (err) {
+      console.error('Error obteniendo todos los tickets:', err.message);
+      socket.emit('lista-todos-tickets', []);
+    }
+  });
+
+  // Tomar un caso desde el boton del panel de tecnico (igual que /tomar por texto)
+  socket.on('tomar-ticket-boton', async ({ numero }) => {
+    if (!esTecnicoAutorizado(nombreActual) || !salaActual) return;
+    try {
+      const ticket = await Ticket.findOne({ numero });
+      if (!ticket || ticket.estado === 'Resuelto') return;
+
+      ticket.estado = 'En proceso';
+      ticket.tecnicoAsignado = nombreActual;
+      ticket.historial.push({ estado: 'En proceso' });
+      await ticket.save();
+
+      const mensajeTomado = {
+        sala: salaActual,
+        nombre: NOMBRE_BOT_SOPORTE,
+        texto: `🧑‍💻 ${nombreActual} tomó el ticket #${numero} y está trabajando en tu caso, ${ticket.nombre}. Te avisamos aquí mismo apenas tengamos una solución.`,
+        tipo: 'texto',
+        hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+      };
+      await new Mensaje(mensajeTomado).save();
+      io.to(salaActual).emit('mensaje', mensajeTomado);
+
+      const tickets = await Ticket.find({}).sort({ fechaCreacion: -1 });
+      socket.emit('lista-todos-tickets', tickets);
+    } catch (err) {
+      console.error('Error tomando ticket desde el panel:', err.message);
+    }
+  });
+
+  // Resolver un caso desde el boton del panel de tecnico (igual que /resolver por texto)
+  socket.on('resolver-ticket-boton', async ({ numero, solucion }) => {
+    if (!esTecnicoAutorizado(nombreActual) || !salaActual) return;
+    if (!solucion || !solucion.trim()) return;
+    try {
+      const ticket = await Ticket.findOne({ numero });
+      if (!ticket) return;
+
+      ticket.estado = 'Resuelto';
+      ticket.solucion = solucion.trim();
+      if (!ticket.tecnicoAsignado) ticket.tecnicoAsignado = nombreActual;
+      ticket.historial.push({ estado: 'Resuelto' });
+      await ticket.save();
+
+      const mensajeConfirmacion = {
+        sala: salaActual,
+        nombre: NOMBRE_BOT_SOPORTE,
+        texto: `✅ ${nombreActual} marcó el ticket #${numero} como resuelto.\n\nSolución: ${ticket.solucion}\n\n¿Te funcionó? Si la confirmas, escribe: /aprobar ${numero}`,
+        tipo: 'texto',
+        hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+      };
+      await new Mensaje(mensajeConfirmacion).save();
+      io.to(salaActual).emit('mensaje', mensajeConfirmacion);
+
+      const tickets = await Ticket.find({}).sort({ fechaCreacion: -1 });
+      socket.emit('lista-todos-tickets', tickets);
+    } catch (err) {
+      console.error('Error resolviendo ticket desde el panel:', err.message);
+    }
+  });
+
+  // Aprobar una solucion desde el boton del panel de tecnico (igual que /aprobar por texto)
+  socket.on('aprobar-ticket-boton', async ({ numero }) => {
+    if (!esTecnicoAutorizado(nombreActual) || !salaActual) return;
+    try {
+      const ticket = await Ticket.findOne({ numero });
+      if (!ticket || ticket.estado !== 'Resuelto' || !ticket.solucion || ticket.aprobadoParaConocimiento) return;
+
+      ticket.aprobadoParaConocimiento = true;
+      await ticket.save();
+
+      const textoDescripcion = normalizarTexto(ticket.descripcion);
+      const palabrasClave = Array.from(new Set(
+        [textoDescripcion, ...textoDescripcion.split(' ').filter((palabra) => palabra.length > 3)]
+      ));
+
+      preguntasFrecuentes.push({ pregunta: ticket.descripcion, palabrasClave, respuesta: ticket.solucion });
+
+      await new Conocimiento({
+        sala: SALA_SOPORTE,
+        pregunta: ticket.descripcion,
+        palabrasClave,
+        respuesta: ticket.solucion,
+        ticketOrigen: numero
+      }).save();
+
+      const mensajeAprobado = {
+        sala: salaActual,
+        nombre: NOMBRE_BOT_SOPORTE,
+        texto: `🧠 ${nombreActual} aprobó la solución del ticket #${numero}. A partir de ahora se usará automáticamente para casos parecidos.`,
+        tipo: 'texto',
+        hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+      };
+      await new Mensaje(mensajeAprobado).save();
+      io.to(salaActual).emit('mensaje', mensajeAprobado);
+
+      const tickets = await Ticket.find({}).sort({ fechaCreacion: -1 });
+      socket.emit('lista-todos-tickets', tickets);
+    } catch (err) {
+      console.error('Error aprobando ticket desde el panel:', err.message);
+    }
+  });
+
   // Indicador de "escribiendo..."
   socket.on('escribiendo', ({ nombre, sala }) => {
     socket.to(sala).emit('escribiendo', nombre);
