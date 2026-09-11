@@ -347,6 +347,12 @@
   </select>
   <input type="text" id="input-sala-custom" placeholder="Escribe el nombre de la sala" style="display:none;">
 
+  <div id="campos-soporte" style="display:none;">
+    <input type="text" id="input-area" placeholder="Área (ej: Laboratorio)">
+    <input type="text" id="input-cargo" placeholder="Cargo (ej: Enfermera jefe)">
+    <input type="text" id="input-ext" placeholder="Extensión (ej: 1234)">
+  </div>
+
   <button id="btn-entrar">Entrar</button>
 </div>
 
@@ -386,6 +392,10 @@
   const inputNombre = document.getElementById('input-nombre');
   const selectSala = document.getElementById('select-sala');
   const inputSalaCustom = document.getElementById('input-sala-custom');
+  const camposSoporte = document.getElementById('campos-soporte');
+  const inputArea = document.getElementById('input-area');
+  const inputCargo = document.getElementById('input-cargo');
+  const inputExt = document.getElementById('input-ext');
   const btnEntrar = document.getElementById('btn-entrar');
   const mensajesDiv = document.getElementById('mensajes');
   const formMensaje = document.getElementById('form-mensaje');
@@ -405,6 +415,7 @@
 
   selectSala.addEventListener('change', () => {
     inputSalaCustom.style.display = selectSala.value === '__otra__' ? 'block' : 'none';
+    camposSoporte.style.display = selectSala.value === 'Soporte Tecnico' ? 'block' : 'none';
   });
 
   function entrarAlChat() {
@@ -417,9 +428,13 @@
       if (!sala) return;
     }
 
+    const area = inputArea.value.trim();
+    const cargo = inputCargo.value.trim();
+    const ext = inputExt.value.trim();
+
     miNombre = nombre;
     miSala = sala;
-    socket.emit('unirse-sala', { nombre, sala });
+    socket.emit('unirse-sala', { nombre, sala, area, cargo, ext });
     loginBox.style.display = 'none';
     chatContainer.style.display = 'flex';
     salaActualLabel.textContent = sala;
@@ -442,6 +457,10 @@
     selectSala.value = 'General';
     inputSalaCustom.style.display = 'none';
     inputSalaCustom.value = '';
+    camposSoporte.style.display = 'none';
+    inputArea.value = '';
+    inputCargo.value = '';
+    inputExt.value = '';
   });
 
   btnEntrar.addEventListener('click', entrarAlChat);
@@ -650,12 +669,16 @@
       const solucionHtml = ticket.solucion
         ? `<div class="descripcion-ticket"><strong>Solución:</strong> ${escaparHTML(ticket.solucion)}</div>`
         : '';
+      const datosHtml = (ticket.area || ticket.cargo || ticket.extension)
+        ? `<div class="descripcion-ticket">Área: ${escaparHTML(ticket.area || 'N/A')} · Cargo: ${escaparHTML(ticket.cargo || 'N/A')} · Ext: ${escaparHTML(ticket.extension || 'N/A')}</div>`
+        : '';
       item.innerHTML = `
         <div class="fila-superior">
           <strong>#${escaparHTML(ticket.numero)} — ${escaparHTML(ticket.categoria)}</strong>
           <span class="badge-estado" style="background:${color};">${escaparHTML(ticket.estado)}</span>
         </div>
         <div class="descripcion-ticket">${escaparHTML(ticket.descripcion)}</div>
+        ${datosHtml}
         ${solucionHtml}
       `;
       ticketsPanel.appendChild(item);

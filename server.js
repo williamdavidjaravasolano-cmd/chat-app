@@ -54,6 +54,9 @@ const ticketSchema = new mongoose.Schema({
   categoria: String,
   descripcion: String,
   nombre: String, // quien creo el ticket
+  area: { type: String, default: '' },
+  cargo: { type: String, default: '' },
+  extension: { type: String, default: '' },
   sala: String,
   estado: { type: String, default: 'Creado' }, // Creado, En proceso, En espera, Resuelto
   solucion: { type: String, default: null },
@@ -66,6 +69,11 @@ const Ticket = mongoose.model('Ticket', ticketSchema);
 async function generarNumeroTicket() {
   const total = await Ticket.countDocuments();
   return `T-${4580 + total + 1}`;
+}
+
+// Arma el bloque de datos del ticket en el formato que se muestra en el chat
+function formatoDatosTicket({ area, nombre, cargo, extension, incidencia }) {
+  return `Área: ${area || 'N/A'}\nNombre: ${nombre}\nCargo: ${cargo || 'N/A'}\nExt: ${extension || 'N/A'}\nIncidencia: ${incidencia}`;
 }
 
 // ---------- Base de conocimiento aprendida de tickets resueltos ----------
@@ -236,11 +244,17 @@ io.on('connection', (socket) => {
   let salaActual = null;
   let nombreActual = null;
   let ultimaPreguntaFaq = null; // guarda la ultima pregunta que el bot respondio, para crear tickets con contexto
+  let areaActual = '';
+  let cargoActual = '';
+  let extActual = '';
 
   // El usuario elige nombre y sala al entrar
-  socket.on('unirse-sala', async ({ nombre, sala }) => {
+  socket.on('unirse-sala', async ({ nombre, sala, area, cargo, ext }) => {
     salaActual = sala;
     nombreActual = nombre;
+    areaActual = area || '';
+    cargoActual = cargo || '';
+    extActual = ext || '';
     socket.join(sala);
 
     if (!usuariosPorSala[sala]) usuariosPorSala[sala] = {};
@@ -478,12 +492,16 @@ io.on('connection', (socket) => {
           categoria: 'Otros',
           descripcion: descripcionTicket,
           nombre: data.nombre,
+          area: areaActual,
+          cargo: cargoActual,
+          extension: extActual,
           sala: data.sala,
           estado: 'En espera',
           historial: [{ estado: 'Creado' }, { estado: 'En espera' }]
         }).save();
 
-        respuestaBot = `Entendido, ${data.nombre}. Se generó el ticket #${numeroTicket} y un técnico va a contactarte por este mismo chat. Puedes revisar el estado en "Mis tickets" (menú ☰).`;
+        const datosTicket = formatoDatosTicket({ area: areaActual, nombre: data.nombre, cargo: cargoActual, extension: extActual, incidencia: descripcionTicket });
+        respuestaBot = `Entendido, ${data.nombre}. Se generó el ticket #${numeroTicket}.\n\n${datosTicket}\n\nUn técnico va a contactarte por este mismo chat. Puedes revisar el estado en "Mis tickets" (menú ☰).`;
       } catch (err) {
         console.error('Error creando ticket automatico de escalamiento:', err.message);
         respuestaBot = `Entendido, ${data.nombre}. Un asesor va a contactarte pronto para ayudarte con este tema.`;
@@ -501,11 +519,15 @@ io.on('connection', (socket) => {
             categoria: 'Otros',
             descripcion: item.pregunta,
             nombre: data.nombre,
+            area: areaActual,
+            cargo: cargoActual,
+            extension: extActual,
             sala: data.sala,
             estado: 'En proceso',
             historial: [{ estado: 'Creado' }, { estado: 'En proceso' }]
           }).save();
-          respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${item.respuesta}`;
+          const datosTicket = formatoDatosTicket({ area: areaActual, nombre: data.nombre, cargo: cargoActual, extension: extActual, incidencia: item.pregunta });
+          respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${datosTicket}\n\n${item.respuesta}`;
         } catch (err) {
           console.error('Error generando ticket automatico de FAQ:', err.message);
           respuestaBot = item.respuesta;
@@ -625,6 +647,9 @@ io.on('connection', (socket) => {
         categoria,
         descripcion,
         nombre,
+        area: areaActual,
+        cargo: cargoActual,
+        extension: extActual,
         sala,
         estado: estadoInicial,
         historial
@@ -632,10 +657,11 @@ io.on('connection', (socket) => {
 
       socket.emit('ticket-creado', ticketGuardado);
 
-      // Anunciamos el ticket en el chat de la sala
+      // Anunciamos el ticket en el chat de la sala, con los datos completos
+      const datosTicket = formatoDatosTicket({ area: areaActual, nombre, cargo: cargoActual, extension: extActual, incidencia: descripcion });
       const textoAnuncio = escalar
-        ? `🙋 ${nombre} solicitó hablar con un técnico. Ticket #${numero} (${categoria}), en espera de atención.\nProblema: ${descripcion}`
-        : `🎫 Se creó el ticket #${numero} (${categoria}) para ${nombre}.\nProblema: ${descripcion}`;
+        ? `🙋 ${nombre} solicitó hablar con un técnico. Ticket #${numero} (${categoria}), en espera de atención.\n\n${datosTicket}`
+        : `🎫 Se creó el ticket #${numero} (${categoria}).\n\n${datosTicket}`;
 
       const mensajeTicket = {
         sala,
