@@ -752,7 +752,8 @@
             sala: miSala,
             pregunta: data.preguntaOrigen,
             voto: boton.dataset.voto,
-            nombre: miNombre
+            nombre: miNombre,
+            numeroTicket: data.numeroTicket || null
           });
           votosRealizados.add(data._id);
           encuesta.innerHTML = '<span class="encuesta-texto">¡Gracias por tu opinión!</span>';

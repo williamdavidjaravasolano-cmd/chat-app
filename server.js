@@ -34,7 +34,8 @@ const mensajeSchema = new mongoose.Schema({
   hora: String,
   fecha: { type: Date, default: Date.now },
   esRespuestaFaq: { type: Boolean, default: false }, // true si es respuesta automatica de una pregunta frecuente
-  preguntaOrigen: { type: String, default: null } // la pregunta que genero esta respuesta
+  preguntaOrigen: { type: String, default: null }, // la pregunta que genero esta respuesta
+  numeroTicket: { type: String, default: null } // el ticket relacionado con esta respuesta, si aplica
 });
 const Mensaje = mongoose.model('Mensaje', mensajeSchema);
 
@@ -475,6 +476,7 @@ io.on('connection', (socket) => {
     let nombreBot = null;
     let esFaq = false;
     let preguntaCanonica = null;
+    let numeroTicketGenerado = null;
     const textoNormalizado = normalizarTexto(data.texto);
 
     // Primero revisamos si el mensaje indica que una respuesta anterior no funciono.
@@ -526,6 +528,7 @@ io.on('connection', (socket) => {
             estado: 'En proceso',
             historial: [{ estado: 'Creado' }, { estado: 'En proceso' }]
           }).save();
+          numeroTicketGenerado = numeroTicket;
           const datosTicket = formatoDatosTicket({ area: areaActual, nombre: data.nombre, cargo: cargoActual, extension: extActual, incidencia: item.pregunta });
           respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${datosTicket}\n\n${item.respuesta}`;
         } catch (err) {
@@ -551,6 +554,7 @@ io.on('connection', (socket) => {
             estado: 'En proceso',
             historial: [{ estado: 'Creado' }, { estado: 'En proceso' }]
           }).save();
+          numeroTicketGenerado = numeroTicket;
           respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${item.respuesta}`;
         } catch (err) {
           console.error('Error generando ticket automatico de FAQ:', err.message);
@@ -577,7 +581,8 @@ io.on('connection', (socket) => {
           tipo: 'texto',
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }),
           esRespuestaFaq: esFaq,
-          preguntaOrigen: esFaq ? preguntaCanonica : null
+          preguntaOrigen: esFaq ? preguntaCanonica : null,
+          numeroTicket: numeroTicketGenerado
         };
         try {
           const guardado = await new Mensaje(mensajeBot).save();
@@ -591,11 +596,42 @@ io.on('connection', (socket) => {
   });
 
   // El usuario responde la encuesta de satisfaccion (👍 o 👎) de una respuesta del bot
-  socket.on('voto-respuesta', async ({ sala, pregunta, voto, nombre }) => {
+  socket.on('voto-respuesta', async ({ sala, pregunta, voto, nombre, numeroTicket }) => {
     try {
       await new Voto({ sala, pregunta, voto, nombre }).save();
     } catch (err) {
       console.error('Error guardando el voto:', err.message);
+    }
+
+    // Si el voto fue positivo y hay un ticket asociado, lo cerramos con esa
+    // solucion (que ya existia en la base de conocimiento, no hay que aprobarla de nuevo)
+    if (voto === 'positivo' && numeroTicket) {
+      try {
+        const ticket = await Ticket.findOne({ numero: numeroTicket });
+        if (ticket && ticket.estado !== 'Resuelto') {
+          const listaBusqueda = sala === SALA_SOPORTE ? preguntasFrecuentes : preguntasAsesoria;
+          const itemEncontrado = listaBusqueda.find((it) => it.pregunta === pregunta);
+
+          ticket.estado = 'Resuelto';
+          ticket.solucion = itemEncontrado ? itemEncontrado.respuesta : 'Confirmado como resuelto por el usuario.';
+          ticket.aprobadoParaConocimiento = true; // ya era una solucion conocida, no hace falta /aprobar
+          ticket.historial.push({ estado: 'Resuelto' });
+          await ticket.save();
+
+          const nombreBotCierre = (sala === SALA_SOPORTE) ? NOMBRE_BOT_SOPORTE : NOMBRE_BOT_ASESORIA;
+          const mensajeCierre = {
+            sala,
+            nombre: nombreBotCierre,
+            texto: `✅ El ticket #${numeroTicket} quedó marcado como resuelto (confirmado por ${nombre}).`,
+            tipo: 'texto',
+            hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+          };
+          await new Mensaje(mensajeCierre).save();
+          io.to(sala).emit('mensaje', mensajeCierre);
+        }
+      } catch (err) {
+        console.error('Error cerrando ticket por voto positivo:', err.message);
+      }
     }
 
     // Si el voto fue negativo, avisamos que un asesor va a contactar a la persona
@@ -683,7 +719,8 @@ io.on('connection', (socket) => {
             tipo: 'texto',
             hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }),
             esRespuestaFaq: true,
-            preguntaOrigen: item.pregunta
+            preguntaOrigen: item.pregunta,
+            numeroTicket: numero
           };
           const guardado = await new Mensaje(mensajeBot).save();
           mensajeBot._id = guardado._id;
