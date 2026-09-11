@@ -48,6 +48,24 @@ const votoSchema = new mongoose.Schema({
 });
 const Voto = mongoose.model('Voto', votoSchema);
 
+// ---------- Modelo de tickets (Fase 1 - Sistema de tickets) ----------
+const ticketSchema = new mongoose.Schema({
+  numero: { type: String, unique: true },
+  categoria: String,
+  descripcion: String,
+  nombre: String, // quien creo el ticket
+  sala: String,
+  estado: { type: String, default: 'Creado' }, // Creado, En proceso, En espera, Resuelto
+  historial: [{ estado: String, fecha: { type: Date, default: Date.now } }],
+  fechaCreacion: { type: Date, default: Date.now }
+});
+const Ticket = mongoose.model('Ticket', ticketSchema);
+
+async function generarNumeroTicket() {
+  const total = await Ticket.countDocuments();
+  return `T-${4580 + total + 1}`;
+}
+
 // ---------- Preguntas frecuentes por sala ----------
 // Puedes agregar mas preguntas aqui. El "pregunta" debe escribirse EXACTAMENTE
 // igual en el archivo public/index.html (objeto preguntasPorSala), porque es lo
@@ -297,6 +315,78 @@ io.on('connection', (socket) => {
         console.error('Error guardando mensaje de derivacion:', err.message);
       }
       io.to(sala).emit('mensaje', mensajeBot);
+    }
+  });
+
+  // El usuario crea un ticket nuevo (categoria + descripcion del problema)
+  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion }) => {
+    try {
+      const numero = await generarNumeroTicket();
+      const historial = [{ estado: 'Creado' }];
+
+      // Si la descripcion coincide con una pregunta frecuente, damos una respuesta rapida
+      const textoNormalizado = normalizarTexto(descripcion);
+      const item = buscarPreguntaFaq(preguntasFrecuentes, textoNormalizado);
+
+      let estadoInicial = 'Creado';
+      if (item) {
+        estadoInicial = 'En proceso';
+        historial.push({ estado: 'En proceso' });
+      }
+
+      const ticketGuardado = await new Ticket({
+        numero,
+        categoria,
+        descripcion,
+        nombre,
+        sala,
+        estado: estadoInicial,
+        historial
+      }).save();
+
+      socket.emit('ticket-creado', ticketGuardado);
+
+      // Anunciamos el ticket en el chat de la sala
+      const mensajeTicket = {
+        sala,
+        nombre: NOMBRE_BOT_SOPORTE,
+        texto: `🎫 Se creó el ticket #${numero} (${categoria}) para ${nombre}.\nProblema: ${descripcion}`,
+        tipo: 'texto',
+        hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+      };
+      await new Mensaje(mensajeTicket).save();
+      io.to(sala).emit('mensaje', mensajeTicket);
+
+      // Si encontramos una respuesta automatica para el problema, la enviamos tambien
+      if (item) {
+        setTimeout(async () => {
+          const mensajeBot = {
+            sala,
+            nombre: NOMBRE_BOT_SOPORTE,
+            texto: `Para tu ticket #${numero}, esto puede ayudarte:\n\n${item.respuesta}`,
+            tipo: 'texto',
+            hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }),
+            esRespuestaFaq: true,
+            preguntaOrigen: item.pregunta
+          };
+          const guardado = await new Mensaje(mensajeBot).save();
+          mensajeBot._id = guardado._id;
+          io.to(sala).emit('mensaje', mensajeBot);
+        }, 800);
+      }
+    } catch (err) {
+      console.error('Error creando ticket:', err.message);
+    }
+  });
+
+  // El usuario pide ver la lista de sus propios tickets
+  socket.on('obtener-tickets', async ({ nombre }) => {
+    try {
+      const tickets = await Ticket.find({ nombre }).sort({ fechaCreacion: -1 });
+      socket.emit('lista-tickets', tickets);
+    } catch (err) {
+      console.error('Error obteniendo tickets:', err.message);
+      socket.emit('lista-tickets', []);
     }
   });
 

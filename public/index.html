@@ -197,7 +197,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel {
+  #faq-panel, #ticket-panel, #tickets-panel {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -208,17 +208,17 @@
     border-radius: 8px;
     padding: 8px;
     box-shadow: 0 -2px 8px rgba(0,0,0,0.15);
-    max-height: 220px;
+    max-height: 260px;
     overflow-y: auto;
     z-index: 10;
   }
-  #faq-panel .faq-titulo {
+  #faq-panel .faq-titulo, #ticket-panel .faq-titulo, #tickets-panel .faq-titulo {
     font-size: 12px;
     color: #075e54;
     font-weight: bold;
     margin-bottom: 6px;
   }
-  #faq-panel button {
+  #faq-panel button, #ticket-panel button {
     display: block;
     width: 100%;
     text-align: left;
@@ -230,7 +230,69 @@
     cursor: pointer;
     font-size: 13px;
   }
-  #faq-panel button:hover { background: #dcf8c6; }
+  #faq-panel button:hover, #ticket-panel button:hover { background: #dcf8c6; }
+
+  #ticket-panel textarea {
+    width: 100%;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    margin-bottom: 6px;
+    font-family: inherit;
+    resize: vertical;
+  }
+  #ticket-panel .boton-enviar-ticket {
+    background: #25d366 !important;
+    color: white;
+    text-align: center;
+    font-weight: bold;
+  }
+
+  .filtros-tickets {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .filtros-tickets button {
+    flex: 1;
+    font-size: 11px;
+    padding: 5px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #f0f0f0;
+  }
+  .filtros-tickets button.activo {
+    background: #25d366;
+    color: white;
+  }
+  .item-ticket {
+    background: #f9f9f9;
+    border-radius: 6px;
+    padding: 8px;
+    margin-bottom: 6px;
+  }
+  .item-ticket .fila-superior {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+  }
+  .item-ticket .fila-superior strong {
+    font-size: 13px;
+  }
+  .item-ticket .badge-estado {
+    color: white;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .item-ticket .descripcion-ticket {
+    font-size: 12px;
+    color: #555;
+    margin-top: 4px;
+  }
 
   .encuesta {
     margin-top: 6px;
@@ -282,8 +344,12 @@
 
   <div id="emoji-picker"></div>
   <div id="faq-panel"></div>
+  <div id="ticket-panel"></div>
+  <div id="tickets-panel"></div>
 
   <form id="form-mensaje">
+    <button type="button" class="btn-circular" id="btn-ticket" title="Crear ticket" style="display:none;">🎫</button>
+    <button type="button" class="btn-circular" id="btn-mis-tickets" title="Mis tickets" style="display:none;">📋</button>
     <button type="button" class="btn-circular" id="btn-faq" title="Preguntas frecuentes" style="display:none;">❓</button>
     <button type="button" class="btn-circular" id="btn-emoji" title="Emojis">😊</button>
     <button type="button" class="btn-circular" id="btn-imagen" title="Enviar imagen">📷</button>
@@ -313,6 +379,10 @@
   const btnMenu = document.getElementById('btn-menu');
   const btnFaq = document.getElementById('btn-faq');
   const faqPanel = document.getElementById('faq-panel');
+  const btnTicket = document.getElementById('btn-ticket');
+  const ticketPanel = document.getElementById('ticket-panel');
+  const btnMisTickets = document.getElementById('btn-mis-tickets');
+  const ticketsPanel = document.getElementById('tickets-panel');
   const btnEmoji = document.getElementById('btn-emoji');
   const emojiPicker = document.getElementById('emoji-picker');
   const btnImagen = document.getElementById('btn-imagen');
@@ -349,6 +419,8 @@
     mensajesDiv.innerHTML = '';
     emojiPicker.style.display = 'none';
     faqPanel.style.display = 'none';
+    ticketPanel.style.display = 'none';
+    ticketsPanel.style.display = 'none';
     miSala = '';
     selectSala.value = 'General';
     inputSalaCustom.style.display = 'none';
@@ -384,8 +456,16 @@
     emojiPicker.appendChild(span);
   });
 
+  function cerrarPaneles(excepto) {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel].forEach((panel) => {
+      if (panel !== excepto) panel.style.display = 'none';
+    });
+  }
+
   btnEmoji.addEventListener('click', () => {
-    emojiPicker.style.display = emojiPicker.style.display === 'flex' ? 'none' : 'flex';
+    const abrir = emojiPicker.style.display !== 'flex';
+    cerrarPaneles(emojiPicker);
+    emojiPicker.style.display = abrir ? 'flex' : 'none';
   });
 
   // ---------- Preguntas frecuentes (Soporte Tecnico) ----------
@@ -415,30 +495,145 @@
 
     if (!preguntas) {
       btnFaq.style.display = 'none';
-      return;
+    } else {
+      btnFaq.style.display = 'flex';
+
+      const tituloFaq = document.createElement('div');
+      tituloFaq.classList.add('faq-titulo');
+      tituloFaq.textContent = 'Elige tu pregunta:';
+      faqPanel.appendChild(tituloFaq);
+
+      preguntas.forEach((pregunta) => {
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.textContent = pregunta;
+        boton.addEventListener('click', () => {
+          socket.emit('mensaje', { nombre: miNombre, sala: miSala, texto: pregunta, tipo: 'texto' });
+          faqPanel.style.display = 'none';
+        });
+        faqPanel.appendChild(boton);
+      });
     }
 
-    btnFaq.style.display = 'flex';
-
-    const tituloFaq = document.createElement('div');
-    tituloFaq.classList.add('faq-titulo');
-    tituloFaq.textContent = 'Elige tu pregunta:';
-    faqPanel.appendChild(tituloFaq);
-
-    preguntas.forEach((pregunta) => {
-      const boton = document.createElement('button');
-      boton.type = 'button';
-      boton.textContent = pregunta;
-      boton.addEventListener('click', () => {
-        socket.emit('mensaje', { nombre: miNombre, sala: miSala, texto: pregunta, tipo: 'texto' });
-        faqPanel.style.display = 'none';
-      });
-      faqPanel.appendChild(boton);
-    });
+    // Los tickets solo aplican en la sala de Soporte Tecnico
+    const esSoporteTecnico = (sala === 'Soporte Tecnico');
+    btnTicket.style.display = esSoporteTecnico ? 'flex' : 'none';
+    btnMisTickets.style.display = esSoporteTecnico ? 'flex' : 'none';
   }
 
   btnFaq.addEventListener('click', () => {
-    faqPanel.style.display = faqPanel.style.display === 'block' ? 'none' : 'block';
+    const abrir = faqPanel.style.display !== 'block';
+    cerrarPaneles(faqPanel);
+    faqPanel.style.display = abrir ? 'block' : 'none';
+  });
+
+  // ---------- Sistema de tickets (Soporte Tecnico) ----------
+  const categoriasTicket = ['💻 Equipos de cómputo', '🖨️ Impresoras', '📶 Red y conectividad', '💿 Software', '❔ Otros'];
+
+  function construirPanelTicket() {
+    ticketPanel.innerHTML = '';
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = 'Elige una categoría:';
+    ticketPanel.appendChild(titulo);
+
+    categoriasTicket.forEach((categoria) => {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.textContent = categoria;
+      boton.addEventListener('click', () => mostrarFormularioTicket(categoria));
+      ticketPanel.appendChild(boton);
+    });
+  }
+
+  function mostrarFormularioTicket(categoria) {
+    ticketPanel.innerHTML = '';
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = `${categoria} — Describe tu problema:`;
+    ticketPanel.appendChild(titulo);
+
+    const textarea = document.createElement('textarea');
+    textarea.rows = 3;
+    textarea.placeholder = 'Ej: la impresora no imprime desde ayer...';
+    ticketPanel.appendChild(textarea);
+
+    const botonEnviar = document.createElement('button');
+    botonEnviar.type = 'button';
+    botonEnviar.textContent = 'Crear ticket';
+    botonEnviar.classList.add('boton-enviar-ticket');
+    botonEnviar.addEventListener('click', () => {
+      const descripcion = textarea.value.trim();
+      if (!descripcion) return;
+      socket.emit('crear-ticket', { nombre: miNombre, sala: miSala, categoria, descripcion });
+      ticketPanel.style.display = 'none';
+    });
+    ticketPanel.appendChild(botonEnviar);
+  }
+
+  btnTicket.addEventListener('click', () => {
+    const abrir = ticketPanel.style.display !== 'block';
+    cerrarPaneles(ticketPanel);
+    if (abrir) construirPanelTicket();
+    ticketPanel.style.display = abrir ? 'block' : 'none';
+  });
+
+  const coloresEstado = {
+    'Creado': '#9e9e9e',
+    'En proceso': '#2196f3',
+    'En espera': '#ff9800',
+    'Resuelto': '#4caf50'
+  };
+
+  function construirPanelTickets(tickets, filtro) {
+    ticketsPanel.innerHTML = '';
+
+    const filtros = document.createElement('div');
+    filtros.classList.add('filtros-tickets');
+    ['Todos', 'Creado', 'En proceso', 'Resuelto'].forEach((nombreFiltro) => {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.textContent = nombreFiltro;
+      if (filtro === nombreFiltro) boton.classList.add('activo');
+      boton.addEventListener('click', () => construirPanelTickets(tickets, nombreFiltro));
+      filtros.appendChild(boton);
+    });
+    ticketsPanel.appendChild(filtros);
+
+    const ticketsFiltrados = (filtro === 'Todos') ? tickets : tickets.filter((t) => t.estado === filtro);
+
+    if (ticketsFiltrados.length === 0) {
+      const vacio = document.createElement('div');
+      vacio.classList.add('faq-titulo');
+      vacio.textContent = 'No tienes tickets en esta categoría.';
+      ticketsPanel.appendChild(vacio);
+      return;
+    }
+
+    ticketsFiltrados.forEach((ticket) => {
+      const item = document.createElement('div');
+      item.classList.add('item-ticket');
+      const color = coloresEstado[ticket.estado] || '#999';
+      item.innerHTML = `
+        <div class="fila-superior">
+          <strong>#${escaparHTML(ticket.numero)} — ${escaparHTML(ticket.categoria)}</strong>
+          <span class="badge-estado" style="background:${color};">${escaparHTML(ticket.estado)}</span>
+        </div>
+        <div class="descripcion-ticket">${escaparHTML(ticket.descripcion)}</div>
+      `;
+      ticketsPanel.appendChild(item);
+    });
+  }
+
+  socket.on('lista-tickets', (tickets) => {
+    construirPanelTickets(tickets, 'Todos');
+  });
+
+  btnMisTickets.addEventListener('click', () => {
+    const abrir = ticketsPanel.style.display !== 'block';
+    cerrarPaneles(ticketsPanel);
+    if (abrir) socket.emit('obtener-tickets', { nombre: miNombre });
+    ticketsPanel.style.display = abrir ? 'block' : 'none';
   });
 
   // ---------- Imagenes ----------
