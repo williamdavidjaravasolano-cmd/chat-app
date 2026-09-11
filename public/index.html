@@ -614,12 +614,16 @@
       const item = document.createElement('div');
       item.classList.add('item-ticket');
       const color = coloresEstado[ticket.estado] || '#999';
+      const solucionHtml = ticket.solucion
+        ? `<div class="descripcion-ticket"><strong>Solución:</strong> ${escaparHTML(ticket.solucion)}</div>`
+        : '';
       item.innerHTML = `
         <div class="fila-superior">
           <strong>#${escaparHTML(ticket.numero)} — ${escaparHTML(ticket.categoria)}</strong>
           <span class="badge-estado" style="background:${color};">${escaparHTML(ticket.estado)}</span>
         </div>
         <div class="descripcion-ticket">${escaparHTML(ticket.descripcion)}</div>
+        ${solucionHtml}
       `;
       ticketsPanel.appendChild(item);
     });

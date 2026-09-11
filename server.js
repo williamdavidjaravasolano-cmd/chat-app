@@ -56,6 +56,7 @@ const ticketSchema = new mongoose.Schema({
   nombre: String, // quien creo el ticket
   sala: String,
   estado: { type: String, default: 'Creado' }, // Creado, En proceso, En espera, Resuelto
+  solucion: { type: String, default: null },
   historial: [{ estado: String, fecha: { type: Date, default: Date.now } }],
   fechaCreacion: { type: Date, default: Date.now }
 });
@@ -65,6 +66,19 @@ async function generarNumeroTicket() {
   const total = await Ticket.countDocuments();
   return `T-${4580 + total + 1}`;
 }
+
+// ---------- Base de conocimiento aprendida de tickets resueltos ----------
+// Cada vez que se resuelve un ticket con el comando /resolver, se guarda aqui
+// para que quede disponible aunque el servidor se reinicie.
+const conocimientoSchema = new mongoose.Schema({
+  sala: String,
+  pregunta: String,
+  palabrasClave: [String],
+  respuesta: String,
+  ticketOrigen: String,
+  fecha: { type: Date, default: Date.now }
+});
+const Conocimiento = mongoose.model('Conocimiento', conocimientoSchema);
 
 // ---------- Preguntas frecuentes por sala ----------
 // Puedes agregar mas preguntas aqui. El "pregunta" debe escribirse EXACTAMENTE
@@ -174,6 +188,22 @@ function buscarPreguntaFaq(lista, textoNormalizado) {
   return null;
 }
 
+// Al iniciar el servidor, cargamos las soluciones aprendidas de tickets
+// resueltos anteriormente, para que sigan funcionando aunque Render reinicie.
+mongoose.connection.once('open', async () => {
+  try {
+    const aprendidos = await Conocimiento.find({});
+    aprendidos.forEach((item) => {
+      const nuevoItem = { pregunta: item.pregunta, palabrasClave: item.palabrasClave, respuesta: item.respuesta };
+      if (item.sala === SALA_SOPORTE) preguntasFrecuentes.push(nuevoItem);
+      else if (item.sala === SALA_ASESORIA) preguntasAsesoria.push(nuevoItem);
+    });
+    console.log(`Se cargaron ${aprendidos.length} soluciones aprendidas de tickets resueltos.`);
+  } catch (err) {
+    console.error('Error cargando la base de conocimiento aprendida:', err.message);
+  }
+});
+
 // ---------- Saludo automatico tipo mesa de ayuda (todas las salas) ----------
 const NOMBRE_BOT_SALUDO = 'Mesa de Ayuda 🤖';
 const saludos = ['hola', 'holaa', 'holaaa', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'hey', 'que tal', 'ola', 'buen dia', 'saludos'];
@@ -235,6 +265,68 @@ io.on('connection', (socket) => {
     }
 
     io.to(data.sala).emit('mensaje', nuevoMensaje);
+
+    // ---------- Comando /resolver: marca un ticket como resuelto y aprende la solucion ----------
+    // Se usa asi, escrito directo en el chat de Soporte Tecnico:
+    // /resolver T-4581 La solucion fue reiniciar el switch de red del piso 2.
+    if (data.sala === SALA_SOPORTE && /^\/resolver\s+/i.test(data.texto.trim())) {
+      const match = data.texto.trim().match(/^\/resolver\s+(\S+)\s+([\s\S]+)$/i);
+
+      if (match) {
+        const numeroTicket = match[1].toUpperCase();
+        const solucion = match[2].trim();
+
+        try {
+          const ticket = await Ticket.findOne({ numero: numeroTicket });
+
+          if (ticket) {
+            ticket.estado = 'Resuelto';
+            ticket.solucion = solucion;
+            ticket.historial.push({ estado: 'Resuelto' });
+            await ticket.save();
+
+            // Agregamos la solucion a la base de conocimiento para casos parecidos en el futuro
+            const textoDescripcion = normalizarTexto(ticket.descripcion);
+            const palabrasClave = Array.from(new Set(
+              [textoDescripcion, ...textoDescripcion.split(' ').filter((palabra) => palabra.length > 3)]
+            ));
+
+            preguntasFrecuentes.push({ pregunta: ticket.descripcion, palabrasClave, respuesta: solucion });
+
+            await new Conocimiento({
+              sala: SALA_SOPORTE,
+              pregunta: ticket.descripcion,
+              palabrasClave,
+              respuesta: solucion,
+              ticketOrigen: numeroTicket
+            }).save();
+
+            const mensajeConfirmacion = {
+              sala: data.sala,
+              nombre: NOMBRE_BOT_SOPORTE,
+              texto: `✅ Ticket #${numeroTicket} marcado como resuelto. Esta solución ahora forma parte de la base de conocimiento y se usará automáticamente para casos parecidos.`,
+              tipo: 'texto',
+              hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+            };
+            await new Mensaje(mensajeConfirmacion).save();
+            io.to(data.sala).emit('mensaje', mensajeConfirmacion);
+          } else {
+            const mensajeError = {
+              sala: data.sala,
+              nombre: NOMBRE_BOT_SOPORTE,
+              texto: `No encontré ningún ticket con el número ${numeroTicket}. Revisa que esté bien escrito.`,
+              tipo: 'texto',
+              hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+            };
+            await new Mensaje(mensajeError).save();
+            io.to(data.sala).emit('mensaje', mensajeError);
+          }
+        } catch (err) {
+          console.error('Error resolviendo ticket:', err.message);
+        }
+      }
+      return; // ya se manejo este mensaje como comando, no seguimos con FAQ/saludo
+    }
 
     // ---------- Respuestas automaticas ----------
     let respuestaBot = null;
