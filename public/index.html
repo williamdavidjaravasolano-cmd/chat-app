@@ -471,6 +471,7 @@
     chatContainer.style.display = 'flex';
     salaActualLabel.textContent = miSala;
     mostrarFaqSiAplica(miSala);
+    pedirPermisoNotificaciones();
     inputMensaje.focus();
   }
 
@@ -956,9 +957,58 @@
     mensajes.forEach(pintarMensaje);
   });
 
+  // ---------- Notificaciones ----------
+  // Sonido corto generado con Web Audio API (no necesita archivos externos)
+  function reproducirSonidoNotificacion() {
+    try {
+      const contexto = new (window.AudioContext || window.webkitAudioContext)();
+      const oscilador = contexto.createOscillator();
+      const volumen = contexto.createGain();
+      oscilador.connect(volumen);
+      volumen.connect(contexto.destination);
+      oscilador.type = 'sine';
+      oscilador.frequency.setValueAtTime(880, contexto.currentTime);
+      volumen.gain.setValueAtTime(0.15, contexto.currentTime);
+      volumen.gain.exponentialRampToValueAtTime(0.001, contexto.currentTime + 0.35);
+      oscilador.start();
+      oscilador.stop(contexto.currentTime + 0.35);
+    } catch (err) {
+      console.error('No se pudo reproducir el sonido de notificacion:', err);
+    }
+  }
+
+  // Pide permiso de notificaciones del navegador (una sola vez, al entrar al chat)
+  function pedirPermisoNotificaciones() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }
+
+  // Muestra una notificacion del sistema si la pestaña no esta activa
+  function notificarSiEstaEnSegundoPlano(titulo, cuerpo) {
+    const pestañaOculta = document.hidden || !document.hasFocus();
+    if (!pestañaOculta) return;
+
+    reproducirSonidoNotificacion();
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const notificacion = new Notification(titulo, { body: cuerpo, icon: '🎫' });
+      notificacion.onclick = () => {
+        window.focus();
+        notificacion.close();
+      };
+    }
+  }
+
   socket.on('mensaje', (data) => {
     pintarMensaje(data);
     escribiendoIndicador.textContent = '';
+
+    // No notificar los mensajes que uno mismo envio
+    if (data.nombre !== miNombre) {
+      const textoPlano = data.tipo === 'imagen' ? '📷 Imagen' : data.texto;
+      notificarSiEstaEnSegundoPlano(data.nombre, textoPlano.slice(0, 120));
+    }
   });
 
   socket.on('mensaje-sistema', (texto) => {
