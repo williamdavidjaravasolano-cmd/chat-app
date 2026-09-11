@@ -82,11 +82,11 @@ const preguntasFrecuentes = [
     pregunta: 'No tengo conexión a internet o wifi',
     palabrasClave: ['no tengo internet', 'sin internet', 'no hay wifi', 'no conecta wifi', 'internet no funciona', 'sin wifi', 'no hay señal', 'no carga internet', 'no tengo wifi', 'se corto el internet'],
     respuesta:
-      '1. Verifica que el wifi esté activado en tu equipo (icono de wifi en la barra de tareas).\n' +
-      '2. Reinicia el router: desconéctalo de la energía, espera 30 segundos y vuelve a conectarlo.\n' +
-      '3. Espera 1-2 minutos a que las luces del router se estabilicen.\n' +
-      '4. Intenta conectarte de nuevo a la red wifi con la contraseña correcta.\n' +
-      'Si otros equipos tampoco tienen internet, es probable que sea un problema del proveedor de internet.'
+      '1. Revisa que el cable de red esté bien conectado, tanto en el computador como en el router.\n' +
+      '2. Verifica que el wifi esté activado en tu equipo (icono de wifi en la barra de tareas).\n' +
+      '3. Observa si los led (lucecitas) de la CPU o el computador están titilando; si están apagados, revisa que el equipo esté bien conectado a la corriente.\n' +
+      '4. Revisa también las luces del router: si están apagadas o en rojo, es probable que el problema sea del servicio de internet, no del computador.\n' +
+      'Si después de revisar esto sigues sin conexión, escribe aquí para que un asesor te ayude.'
   },
   {
     pregunta: 'Olvidé mi contraseña de usuario en Windows',
