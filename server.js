@@ -61,6 +61,7 @@ const ticketSchema = new mongoose.Schema({
   sala: String,
   estado: { type: String, default: 'Creado' }, // Creado, En proceso, En espera, Resuelto
   solucion: { type: String, default: null },
+  tecnicoAsignado: { type: String, default: null }, // quien tomo el caso con /tomar
   aprobadoParaConocimiento: { type: Boolean, default: false },
   historial: [{ estado: String, fecha: { type: Date, default: Date.now } }],
   fechaCreacion: { type: Date, default: Date.now }
@@ -352,6 +353,7 @@ io.on('connection', (socket) => {
           if (ticket) {
             ticket.estado = 'Resuelto';
             ticket.solucion = solucion;
+            if (!ticket.tecnicoAsignado) ticket.tecnicoAsignado = data.nombre;
             ticket.historial.push({ estado: 'Resuelto' });
             await ticket.save();
 
@@ -493,13 +495,14 @@ io.on('connection', (socket) => {
             io.to(data.sala).emit('mensaje', mensajeYa);
           } else {
             ticket.estado = 'En proceso';
+            ticket.tecnicoAsignado = data.nombre;
             ticket.historial.push({ estado: 'En proceso' });
             await ticket.save();
 
             const mensajeTomado = {
               sala: data.sala,
               nombre: NOMBRE_BOT_SOPORTE,
-              texto: `🧑‍💻 Un técnico tomó el ticket #${numeroTicket} y está trabajando en tu caso, ${ticket.nombre}. Te avisamos aquí mismo apenas tengamos una solución.`,
+              texto: `🧑‍💻 ${data.nombre} tomó el ticket #${numeroTicket} y está trabajando en tu caso, ${ticket.nombre}. Te avisamos aquí mismo apenas tengamos una solución.`,
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };

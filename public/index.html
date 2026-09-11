@@ -672,6 +672,9 @@
       const datosHtml = (ticket.area || ticket.cargo || ticket.extension)
         ? `<div class="descripcion-ticket">Área: ${escaparHTML(ticket.area || 'N/A')} · Cargo: ${escaparHTML(ticket.cargo || 'N/A')} · Ext: ${escaparHTML(ticket.extension || 'N/A')}</div>`
         : '';
+      const tecnicoHtml = ticket.tecnicoAsignado
+        ? `<div class="descripcion-ticket">🧑‍💻 <strong>Atendido por:</strong> ${escaparHTML(ticket.tecnicoAsignado)}</div>`
+        : `<div class="descripcion-ticket" style="color:#999;">⏳ Aún nadie ha tomado este caso.</div>`;
       item.innerHTML = `
         <div class="fila-superior">
           <strong>#${escaparHTML(ticket.numero)} — ${escaparHTML(ticket.categoria)}</strong>
@@ -679,6 +682,7 @@
         </div>
         <div class="descripcion-ticket">${escaparHTML(ticket.descripcion)}</div>
         ${datosHtml}
+        ${tecnicoHtml}
         ${solucionHtml}
       `;
       ticketsPanel.appendChild(item);
