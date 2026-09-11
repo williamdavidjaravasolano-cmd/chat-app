@@ -82,11 +82,10 @@ const preguntasFrecuentes = [
     pregunta: 'No tengo conexión a internet o wifi',
     palabrasClave: ['no tengo internet', 'sin internet', 'no hay wifi', 'no conecta wifi', 'internet no funciona', 'sin wifi', 'no hay señal', 'no carga internet', 'no tengo wifi', 'se corto el internet'],
     respuesta:
-      '1. Revisa que el cable de red esté bien conectado, tanto en el computador como en el router.\n' +
-      '2. Verifica que el wifi esté activado en tu equipo (icono de wifi en la barra de tareas).\n' +
-      '3. Observa si los led (lucecitas) de la CPU o el computador están titilando; si están apagados, revisa que el equipo esté bien conectado a la corriente.\n' +
-      '4. Revisa también las luces del router: si están apagadas o en rojo, es probable que el problema sea del servicio de internet, no del computador.\n' +
-      'Si después de revisar esto sigues sin conexión, escribe aquí para que un asesor te ayude.'
+      '1. Verifica que el cable de red esté bien conectado a tu computador, o que el wifi esté activado (icono de wifi en la barra de tareas).\n' +
+      '2. Pregúntale a un compañero cercano si a él también le falla el internet; eso ayuda a saber si es solo tu equipo o toda la red.\n' +
+      '3. Reinicia tu computador (cierra sesión y vuelve a iniciar), sin tocar el router ni otros equipos de red.\n' +
+      'Si el problema continúa, escribe aquí indicando tu área o ubicación para que el área de sistemas revise la red desde su lado.'
   },
   {
     pregunta: 'Olvidé mi contraseña de usuario en Windows',
@@ -95,7 +94,7 @@ const preguntasFrecuentes = [
       '1. Verifica que la tecla "Bloq Mayús" (Caps Lock) no esté activada, ya que esto cambia mayúsculas y minúsculas al escribir la contraseña.\n' +
       '2. Confirma que estás escribiendo el nombre de usuario correcto (a veces hay más de un usuario creado en el mismo equipo).\n' +
       '3. Intenta con las contraseñas que uses habitualmente, por si la escribiste mal o la confundiste con otra.\n' +
-      'Si nada de esto funciona, restablecer la contraseña normalmente requiere el acceso de un administrador del equipo. Escribe aquí para que un asesor te ayude directamente.'
+      'Si aún así no logras ingresar, escribe aquí indicando tu nombre de usuario (nunca escribas tu contraseña aquí) para que el área de sistemas te restablezca el acceso, ya que ese cambio solo lo puede hacer un administrador.'
   }
 ];
 
