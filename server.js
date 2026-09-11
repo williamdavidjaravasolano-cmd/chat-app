@@ -106,7 +106,11 @@ async function preguntarIA(pregunta) {
       signal: AbortSignal.timeout(15000) // maximo 15 segundos de espera
     });
 
-    if (!respuesta.ok) return null;
+    if (!respuesta.ok) {
+      const detalle = await respuesta.text().catch(() => '');
+      console.error(`Groq respondio con error ${respuesta.status}: ${detalle}`);
+      return null;
+    }
     const datos = await respuesta.json();
     return datos.choices && datos.choices[0] ? datos.choices[0].message.content.trim() : null;
   } catch (err) {
@@ -610,35 +614,44 @@ io.on('connection', (socket) => {
       nombreBot = NOMBRE_BOT_SALUDO;
     }
 
-    // Si nada de lo anterior respondio, probamos con la IA local antes de rendirnos
+    // Si nada de lo anterior respondio, probamos con la IA antes de rendirnos
     if (!respuestaBot && data.tipo === 'texto' && (data.sala === SALA_SOPORTE || data.sala === SALA_ASESORIA)) {
       const respuestaIA = await preguntarIA(data.texto);
-      if (respuestaIA) {
-        try {
-          const numeroTicket = await generarNumeroTicket();
-          await new Ticket({
-            numero: numeroTicket,
-            categoria: 'Otros',
-            descripcion: data.texto,
-            nombre: data.nombre,
-            area: areaActual,
-            cargo: cargoActual,
-            extension: extActual,
-            sala: data.sala,
-            estado: 'En proceso',
-            historial: [{ estado: 'Creado' }, { estado: 'En proceso' }]
-          }).save();
-          numeroTicketGenerado = numeroTicket;
-          const datosTicket = formatoDatosTicket({ area: areaActual, nombre: data.nombre, cargo: cargoActual, extension: extActual, incidencia: data.texto });
+
+      try {
+        const numeroTicket = await generarNumeroTicket();
+        const estadoTicket = respuestaIA ? 'En proceso' : 'En espera';
+        await new Ticket({
+          numero: numeroTicket,
+          categoria: 'Otros',
+          descripcion: data.texto,
+          nombre: data.nombre,
+          area: areaActual,
+          cargo: cargoActual,
+          extension: extActual,
+          sala: data.sala,
+          estado: estadoTicket,
+          historial: [{ estado: 'Creado' }, { estado: estadoTicket }]
+        }).save();
+        numeroTicketGenerado = numeroTicket;
+        const datosTicket = formatoDatosTicket({ area: areaActual, nombre: data.nombre, cargo: cargoActual, extension: extActual, incidencia: data.texto });
+
+        if (respuestaIA) {
           respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${datosTicket}\n\n🤖 ${respuestaIA}`;
-        } catch (err) {
-          console.error('Error generando ticket para respuesta de IA:', err.message);
-          respuestaBot = `🤖 ${respuestaIA}`;
+        } else {
+          // La IA no respondio (fallo, tardo demasiado, o no esta configurada) -- avisamos igual
+          respuestaBot = `🎫 Ticket #${numeroTicket} generado.\n\n${datosTicket}\n\nNo encontré una respuesta automática para esto. Un técnico va a revisar tu caso pronto. Puedes ver el estado en "Mis tickets" (menú ☰).`;
         }
-        nombreBot = (data.sala === SALA_SOPORTE) ? NOMBRE_BOT_SOPORTE : NOMBRE_BOT_ASESORIA;
-        esFaq = true; // permite mostrar la encuesta de satisfaccion tambien en respuestas de la IA
-        preguntaCanonica = data.texto;
+      } catch (err) {
+        console.error('Error generando ticket de respaldo:', err.message);
+        respuestaBot = respuestaIA
+          ? `🤖 ${respuestaIA}`
+          : `No encontré una respuesta automática para esto, ${data.nombre}. Un técnico va a contactarte pronto.`;
       }
+
+      nombreBot = (data.sala === SALA_SOPORTE) ? NOMBRE_BOT_SOPORTE : NOMBRE_BOT_ASESORIA;
+      esFaq = !!respuestaIA; // solo mostramos la encuesta 👍👎 si fue una respuesta real de la IA
+      preguntaCanonica = data.texto;
     }
 
     if (respuestaBot) {
