@@ -34,6 +34,7 @@ const mensajeSchema = new mongoose.Schema({
   hora: String,
   fecha: { type: Date, default: Date.now },
   esRespuestaFaq: { type: Boolean, default: false }, // true si es respuesta automatica de una pregunta frecuente
+  esRespuestaIA: { type: Boolean, default: false }, // true si la respondio la IA (Groq), no las palabras clave
   preguntaOrigen: { type: String, default: null }, // la pregunta que genero esta respuesta
   numeroTicket: { type: String, default: null } // el ticket relacionado con esta respuesta, si aplica
 });
@@ -566,6 +567,7 @@ io.on('connection', (socket) => {
     let respuestaBot = null;
     let nombreBot = null;
     let esFaq = false;
+    let esRespuestaDeIA = false;
     let preguntaCanonica = null;
     let numeroTicketGenerado = null;
     const textoNormalizado = normalizarTexto(data.texto);
@@ -641,6 +643,7 @@ io.on('connection', (socket) => {
 
       nombreBot = (data.sala === SALA_SOPORTE) ? NOMBRE_BOT_SOPORTE : NOMBRE_BOT_ASESORIA;
       esFaq = !!respuestaIA; // solo mostramos la encuesta 👍👎 si fue una respuesta real de la IA
+      esRespuestaDeIA = !!respuestaIA;
       preguntaCanonica = data.texto;
     }
 
@@ -653,6 +656,7 @@ io.on('connection', (socket) => {
           tipo: 'texto',
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }),
           esRespuestaFaq: esFaq,
+          esRespuestaIA: esRespuestaDeIA,
           preguntaOrigen: esFaq ? preguntaCanonica : null,
           numeroTicket: numeroTicketGenerado
         };
@@ -930,6 +934,61 @@ io.on('connection', (socket) => {
       socket.emit('lista-todos-tickets', tickets);
     } catch (err) {
       console.error('Error aprobando ticket desde el panel:', err.message);
+    }
+  });
+
+  // Pide las preguntas que la IA respondio libremente, para que el tecnico revise
+  // cuales convertir en preguntas frecuentes oficiales.
+  socket.on('obtener-respuestas-ia', async () => {
+    if (!esTecnicoAutorizado(nombreActual)) {
+      socket.emit('lista-respuestas-ia', []);
+      return;
+    }
+    try {
+      const respuestas = await Mensaje.find({ esRespuestaIA: true, sala: SALA_SOPORTE })
+        .sort({ fecha: -1 })
+        .limit(50);
+      socket.emit('lista-respuestas-ia', respuestas);
+    } catch (err) {
+      console.error('Error obteniendo respuestas de la IA:', err.message);
+      socket.emit('lista-respuestas-ia', []);
+    }
+  });
+
+  // Convierte una respuesta de la IA en una pregunta frecuente oficial
+  socket.on('convertir-en-faq', async ({ pregunta, respuesta }) => {
+    if (!esTecnicoAutorizado(nombreActual) || !pregunta || !respuesta) return;
+    try {
+      const textoNormalizadoFaq = normalizarTexto(pregunta);
+      const palabrasClave = Array.from(new Set(
+        [textoNormalizadoFaq, ...textoNormalizadoFaq.split(' ').filter((palabra) => palabra.length > 3)]
+      ));
+
+      preguntasFrecuentes.push({ pregunta, palabrasClave, respuesta });
+
+      await new Conocimiento({
+        sala: SALA_SOPORTE,
+        pregunta,
+        palabrasClave,
+        respuesta,
+        ticketOrigen: null
+      }).save();
+
+      if (salaActual) {
+        const mensajeConfirmacion = {
+          sala: salaActual,
+          nombre: NOMBRE_BOT_SOPORTE,
+          texto: `🧠 ${nombreActual} agregó una nueva pregunta frecuente oficial: "${pregunta}".`,
+          tipo: 'texto',
+          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+        };
+        await new Mensaje(mensajeConfirmacion).save();
+        io.to(salaActual).emit('mensaje', mensajeConfirmacion);
+      }
+
+      socket.emit('faq-convertida', { pregunta });
+    } catch (err) {
+      console.error('Error convirtiendo respuesta de IA en FAQ:', err.message);
     }
   });
 

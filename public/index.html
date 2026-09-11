@@ -197,7 +197,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -354,6 +354,38 @@
     resize: vertical;
   }
 
+  .item-respuesta-ia {
+    background: #f9f9f9;
+    border-radius: 6px;
+    padding: 8px;
+    margin-bottom: 6px;
+  }
+  .item-respuesta-ia .pregunta-ia {
+    font-size: 13px;
+    font-weight: bold;
+    color: #075e54;
+  }
+  .item-respuesta-ia .respuesta-ia {
+    font-size: 12px;
+    color: #555;
+    margin: 4px 0 8px 0;
+    white-space: pre-wrap;
+  }
+  .btn-convertir-faq {
+    width: 100%;
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn-convertir-faq:disabled {
+    background: #bdbdbd;
+    cursor: default;
+  }
+
   .encuesta {
     margin-top: 6px;
     display: flex;
@@ -404,6 +436,7 @@
   <div id="ticket-panel"></div>
   <div id="tickets-panel"></div>
   <div id="panel-tecnico"></div>
+  <div id="panel-ia"></div>
   <div id="opciones-panel"></div>
 
   <form id="form-mensaje">
@@ -440,6 +473,7 @@
   const ticketPanel = document.getElementById('ticket-panel');
   const ticketsPanel = document.getElementById('tickets-panel');
   const panelTecnico = document.getElementById('panel-tecnico');
+  const panelIA = document.getElementById('panel-ia');
 
   // Debe coincidir con la lista TECNICOS_AUTORIZADOS de server.js
   const EQUIPO_TECNICO = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Julian', 'Yin Carlos', 'William David', 'Henrry'];
@@ -485,6 +519,7 @@
     ticketPanel.style.display = 'none';
     ticketsPanel.style.display = 'none';
     panelTecnico.style.display = 'none';
+    panelIA.style.display = 'none';
     opcionesPanel.style.display = 'none';
     btnOpciones.style.display = 'none';
     miSala = '';
@@ -523,7 +558,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -580,6 +615,7 @@
 
     if (esSoporteTecnico && esTecnicoActual()) {
       opciones.push({ icono: '🛠️', texto: 'Panel técnico', accion: () => abrirPanel(panelTecnico, () => socket.emit('obtener-todos-tickets')) });
+      opciones.push({ icono: '🧠', texto: 'Respuestas de la IA', accion: () => abrirPanel(panelIA, () => socket.emit('obtener-respuestas-ia')) });
     }
 
     if (preguntas) {
@@ -871,6 +907,64 @@
 
   socket.on('lista-todos-tickets', (tickets) => {
     construirPanelTecnico(tickets, 'Todos');
+  });
+
+  // ---------- Panel de respuestas de la IA ----------
+  function construirPanelIA(respuestas) {
+    panelIA.innerHTML = '';
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = 'Preguntas que respondió la IA';
+    panelIA.appendChild(titulo);
+
+    if (respuestas.length === 0) {
+      const vacio = document.createElement('div');
+      vacio.classList.add('faq-titulo');
+      vacio.textContent = 'Todavía no hay respuestas de la IA para revisar.';
+      panelIA.appendChild(vacio);
+      agregarBotonVolver(panelIA);
+      return;
+    }
+
+    respuestas.forEach((mensaje) => {
+      const item = document.createElement('div');
+      item.classList.add('item-respuesta-ia');
+
+      const pregunta = document.createElement('div');
+      pregunta.classList.add('pregunta-ia');
+      pregunta.textContent = `❓ ${mensaje.preguntaOrigen}`;
+      item.appendChild(pregunta);
+
+      const respuestaLimpia = mensaje.texto.replace(/^🤖\s*/, '');
+      const respuestaDiv = document.createElement('div');
+      respuestaDiv.classList.add('respuesta-ia');
+      respuestaDiv.textContent = respuestaLimpia;
+      item.appendChild(respuestaDiv);
+
+      const botonConvertir = document.createElement('button');
+      botonConvertir.type = 'button';
+      botonConvertir.classList.add('btn-convertir-faq');
+      botonConvertir.textContent = '➕ Convertir en pregunta frecuente';
+      botonConvertir.addEventListener('click', () => {
+        socket.emit('convertir-en-faq', { pregunta: mensaje.preguntaOrigen, respuesta: respuestaLimpia });
+        botonConvertir.disabled = true;
+        botonConvertir.textContent = '✅ Convertida';
+      });
+      item.appendChild(botonConvertir);
+
+      panelIA.appendChild(item);
+    });
+
+    agregarBotonVolver(panelIA);
+  }
+
+  socket.on('lista-respuestas-ia', (respuestas) => {
+    construirPanelIA(respuestas);
+  });
+
+  socket.on('faq-convertida', ({ pregunta }) => {
+    // La confirmacion visual ya se hizo al hacer click; esto es solo para futuros usos
   });
 
   // ---------- Imagenes ----------
