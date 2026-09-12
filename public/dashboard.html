@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard de Tickets — Soporte Técnico</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f4f4f4;
+    color: #222;
+  }
+
+  /* ---------- Pantalla de clave ---------- */
+  #pantalla-clave {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+  #caja-clave {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    text-align: center;
+    width: 300px;
+  }
+  #caja-clave h2 { margin-top: 0; color: #075e54; }
+  #caja-clave input {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  #caja-clave button {
+    width: 100%;
+    padding: 10px;
+    background: #25d366;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  #error-clave { color: #d32f2f; font-size: 13px; min-height: 18px; }
+
+  /* ---------- Dashboard ---------- */
+  #dashboard { display: none; }
+
+  header {
+    background: #075e54;
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header .actualizado { font-size: 12px; opacity: 0.85; }
+
+  .contenedor { padding: 16px; max-width: 1100px; margin: 0 auto; }
+
+  .tarjetas {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+  .tarjeta {
+    flex: 1;
+    min-width: 120px;
+    background: white;
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .tarjeta .numero { font-size: 26px; font-weight: bold; color: #075e54; }
+  .tarjeta .etiqueta { font-size: 12px; color: #666; }
+
+  .filtros {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    background: white;
+    padding: 12px;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .filtros label { font-size: 12px; color: #555; display: block; margin-bottom: 3px; }
+  .filtros select, .filtros input {
+    padding: 7px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 13px;
+  }
+  .filtros button {
+    align-self: flex-end;
+    padding: 8px 14px;
+    background: #075e54;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  th, td { padding: 10px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid #eee; vertical-align: top; }
+  th { background: #f0f0f0; color: #333; position: sticky; top: 0; }
+  tr:last-child td { border-bottom: none; }
+
+  .badge {
+    display: inline-block;
+    color: white;
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .badge-Creado { background: #9e9e9e; }
+  .badge-En.proceso, .badge-EnProceso { background: #2196f3; }
+  .badge-En.espera, .badge-EnEspera { background: #ff9800; }
+  .badge-Resuelto { background: #4caf50; }
+
+  .sin-asignar { color: #999; font-style: italic; }
+  .vacio { text-align: center; padding: 40px; color: #888; }
+
+  @media (max-width: 700px) {
+    table, thead, tbody, th, td, tr { display: block; }
+    thead { display: none; }
+    tr { background: white; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 8px; }
+    td { border: none; padding: 4px 8px; }
+    td::before { content: attr(data-etiqueta) ": "; font-weight: bold; color: #075e54; }
+  }
+</style>
+</head>
+<body>
+
+<div id="pantalla-clave">
+  <div id="caja-clave">
+    <h2>🔒 Dashboard de Tickets</h2>
+    <input type="password" id="input-clave" placeholder="Clave de acceso">
+    <button id="btn-entrar-clave">Entrar</button>
+    <div id="error-clave"></div>
+  </div>
+</div>
+
+<div id="dashboard">
+  <header>
+    <h1>📋 Dashboard de Tickets — Soporte Técnico</h1>
+    <span class="actualizado" id="ultima-actualizacion">Cargando...</span>
+  </header>
+
+  <div class="contenedor">
+    <div class="tarjetas" id="tarjetas-resumen"></div>
+
+    <div class="filtros">
+      <div>
+        <label for="filtro-estado">Estado</label>
+        <select id="filtro-estado">
+          <option value="">Todos</option>
+          <option value="Creado">Creado</option>
+          <option value="En proceso">En proceso</option>
+          <option value="En espera">En espera</option>
+          <option value="Resuelto">Resuelto</option>
+        </select>
+      </div>
+      <div>
+        <label for="filtro-tecnico">Técnico asignado</label>
+        <select id="filtro-tecnico">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <button id="btn-actualizar">🔄 Actualizar ahora</button>
+    </div>
+
+    <div id="contenedor-tabla"></div>
+  </div>
+</div>
+
+<script>
+  let CLAVE_GUARDADA = sessionStorage.getItem('dashboardClave') || '';
+  let todosLosTickets = [];
+
+  const pantallaClave = document.getElementById('pantalla-clave');
+  const dashboard = document.getElementById('dashboard');
+  const inputClave = document.getElementById('input-clave');
+  const errorClave = document.getElementById('error-clave');
+  const filtroEstado = document.getElementById('filtro-estado');
+  const filtroTecnico = document.getElementById('filtro-tecnico');
+  const contenedorTabla = document.getElementById('contenedor-tabla');
+  const tarjetasResumen = document.getElementById('tarjetas-resumen');
+  const ultimaActualizacion = document.getElementById('ultima-actualizacion');
+
+  async function cargarTickets(mostrarErrorSiFalla = true) {
+    try {
+      const respuesta = await fetch('/api/tickets', {
+        headers: { 'x-dashboard-clave': CLAVE_GUARDADA }
+      });
+
+      if (respuesta.status === 401) {
+        sessionStorage.removeItem('dashboardClave');
+        mostrarPantallaClave('Clave incorrecta, intenta de nuevo.');
+        return;
+      }
+
+      todosLosTickets = await respuesta.json();
+      mostrarDashboard();
+      construirFiltroTecnicos();
+      renderizarTodo();
+      ultimaActualizacion.textContent = 'Actualizado: ' + new Date().toLocaleTimeString('es-CO');
+    } catch (err) {
+      if (mostrarErrorSiFalla) alert('No se pudo conectar con el servidor. Intenta de nuevo.');
+    }
+  }
+
+  function mostrarPantallaClave(mensajeError) {
+    pantallaClave.style.display = 'flex';
+    dashboard.style.display = 'none';
+    errorClave.textContent = mensajeError || '';
+  }
+
+  function mostrarDashboard() {
+    pantallaClave.style.display = 'none';
+    dashboard.style.display = 'block';
+  }
+
+  document.getElementById('btn-entrar-clave').addEventListener('click', () => {
+    const clave = inputClave.value.trim();
+    if (!clave) return;
+    CLAVE_GUARDADA = clave;
+    sessionStorage.setItem('dashboardClave', clave);
+    cargarTickets();
+  });
+
+  inputClave.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-entrar-clave').click();
+  });
+
+  function construirFiltroTecnicos() {
+    const tecnicos = Array.from(new Set(
+      todosLosTickets.map((t) => t.tecnicoAsignado).filter(Boolean)
+    )).sort();
+
+    const valorActual = filtroTecnico.value;
+    filtroTecnico.innerHTML = '<option value="">Todos</option>';
+    tecnicos.forEach((tecnico) => {
+      const opcion = document.createElement('option');
+      opcion.value = tecnico;
+      opcion.textContent = tecnico;
+      filtroTecnico.appendChild(opcion);
+    });
+    filtroTecnico.value = valorActual;
+  }
+
+  function escaparHTML(texto) {
+    const div = document.createElement('div');
+    div.textContent = texto == null ? '' : String(texto);
+    return div.innerHTML;
+  }
+
+  function renderizarTarjetas(tickets) {
+    const total = tickets.length;
+    const resueltos = tickets.filter((t) => t.estado === 'Resuelto').length;
+    const pendientes = total - resueltos;
+    const sinAsignar = tickets.filter((t) => !t.tecnicoAsignado && t.estado !== 'Resuelto').length;
+
+    tarjetasResumen.innerHTML = `
+      <div class="tarjeta"><div class="numero">${total}</div><div class="etiqueta">Total</div></div>
+      <div class="tarjeta"><div class="numero">${resueltos}</div><div class="etiqueta">Resueltos</div></div>
+      <div class="tarjeta"><div class="numero">${pendientes}</div><div class="etiqueta">Pendientes</div></div>
+      <div class="tarjeta"><div class="numero">${sinAsignar}</div><div class="etiqueta">Sin asignar</div></div>
+    `;
+  }
+
+  function renderizarTabla(tickets) {
+    if (tickets.length === 0) {
+      contenedorTabla.innerHTML = '<div class="vacio">No hay tickets que coincidan con el filtro.</div>';
+      return;
+    }
+
+    const filas = tickets.map((t) => {
+      const claseBadge = 'badge-' + t.estado.replace(/\s+/g, '.');
+      const tecnicoHtml = t.tecnicoAsignado
+        ? escaparHTML(t.tecnicoAsignado)
+        : '<span class="sin-asignar">Sin asignar</span>';
+      const fecha = t.fechaCreacion ? new Date(t.fechaCreacion).toLocaleString('es-CO') : '';
+
+      return `
+        <tr>
+          <td data-etiqueta="Ticket"><strong>#${escaparHTML(t.numero)}</strong></td>
+          <td data-etiqueta="Categoría">${escaparHTML(t.categoria)}</td>
+          <td data-etiqueta="Estado"><span class="badge ${claseBadge}">${escaparHTML(t.estado)}</span></td>
+          <td data-etiqueta="Creado por">${escaparHTML(t.nombre)}</td>
+          <td data-etiqueta="Área / Cargo / Ext">${escaparHTML(t.area || 'N/A')} · ${escaparHTML(t.cargo || 'N/A')} · ${escaparHTML(t.extension || 'N/A')}</td>
+          <td data-etiqueta="Incidencia">${escaparHTML(t.descripcion)}</td>
+          <td data-etiqueta="Técnico asignado">${tecnicoHtml}</td>
+          <td data-etiqueta="Fecha">${fecha}</td>
+        </tr>
+      `;
+    }).join('');
+
+    contenedorTabla.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Ticket</th>
+            <th>Categoría</th>
+            <th>Estado</th>
+            <th>Creado por</th>
+            <th>Área / Cargo / Ext</th>
+            <th>Incidencia</th>
+            <th>Técnico asignado</th>
+            <th>Fecha</th>
+          </tr>
+        </thead>
+        <tbody>${filas}</tbody>
+      </table>
+    `;
+  }
+
+  function renderizarTodo() {
+    let filtrados = todosLosTickets;
+    if (filtroEstado.value) filtrados = filtrados.filter((t) => t.estado === filtroEstado.value);
+    if (filtroTecnico.value) filtrados = filtrados.filter((t) => t.tecnicoAsignado === filtroTecnico.value);
+
+    renderizarTarjetas(filtrados);
+    renderizarTabla(filtrados);
+  }
+
+  filtroEstado.addEventListener('change', renderizarTodo);
+  filtroTecnico.addEventListener('change', renderizarTodo);
+  document.getElementById('btn-actualizar').addEventListener('click', () => cargarTickets());
+
+  // Actualizacion automatica cada 20 segundos
+  setInterval(() => cargarTickets(false), 20000);
+
+  // Si ya habia una clave guardada en esta pestaña, entrar directo
+  if (CLAVE_GUARDADA) {
+    cargarTickets();
+  } else {
+    mostrarPantallaClave();
+  }
+</script>
+
+</body>
+</html>

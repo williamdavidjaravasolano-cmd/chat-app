@@ -13,6 +13,20 @@ const io = new Server(server, {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+
+// ---------- API del Dashboard de tickets (herramienta separada del chat) ----------
+// Protegida con una clave simple. Configura DASHBOARD_CLAVE en Render.
+// El dashboard (public/dashboard.html) la pide una sola vez y la guarda en el navegador.
+const DASHBOARD_CLAVE = process.env.DASHBOARD_CLAVE || 'cambia-esta-clave';
+
+function verificarClaveDashboard(req, res, next) {
+  const clave = req.headers['x-dashboard-clave'];
+  if (clave !== DASHBOARD_CLAVE) {
+    return res.status(401).json({ error: 'Clave incorrecta' });
+  }
+  next();
+}
 
 // ---------- Conexion a MongoDB Atlas ----------
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -73,6 +87,22 @@ async function generarNumeroTicket() {
   const total = await Ticket.countDocuments();
   return `T-${4580 + total + 1}`;
 }
+
+// Devuelve todos los tickets (para el dashboard). Admite filtros opcionales por
+// query string: ?estado=Resuelto&tecnico=William%20David
+app.get('/api/tickets', verificarClaveDashboard, async (req, res) => {
+  try {
+    const filtro = {};
+    if (req.query.estado) filtro.estado = req.query.estado;
+    if (req.query.tecnico) filtro.tecnicoAsignado = req.query.tecnico;
+
+    const tickets = await Ticket.find(filtro).sort({ fechaCreacion: -1 });
+    res.json(tickets);
+  } catch (err) {
+    console.error('Error en /api/tickets:', err.message);
+    res.status(500).json({ error: 'Error obteniendo los tickets' });
+  }
+});
 
 // Arma el bloque de datos del ticket en el formato que se muestra en el chat
 function formatoDatosTicket({ area, nombre, cargo, extension, incidencia }) {
