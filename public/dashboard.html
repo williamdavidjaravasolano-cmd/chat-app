@@ -80,7 +80,12 @@
     padding: 14px;
     text-align: center;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.1s, border-color 0.15s;
   }
+  .tarjeta:hover { transform: translateY(-2px); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+  .tarjeta.activa { border-color: #25d366; }
   .tarjeta .numero { font-size: 26px; font-weight: bold; color: #075e54; }
   .tarjeta .etiqueta { font-size: 12px; color: #666; }
 
@@ -189,6 +194,8 @@
 <script>
   let CLAVE_GUARDADA = sessionStorage.getItem('dashboardClave') || '';
   let todosLosTickets = [];
+  let listaTecnicos = [];
+  let filtroRapido = null; // 'resueltos' | 'pendientes' | 'sinAsignar' | null (usa los dropdowns)
 
   const pantallaClave = document.getElementById('pantalla-clave');
   const dashboard = document.getElementById('dashboard');
@@ -202,17 +209,19 @@
 
   async function cargarTickets(mostrarErrorSiFalla = true) {
     try {
-      const respuesta = await fetch('/api/tickets', {
-        headers: { 'x-dashboard-clave': CLAVE_GUARDADA }
-      });
+      const [respuestaTickets, respuestaTecnicos] = await Promise.all([
+        fetch('/api/tickets', { headers: { 'x-dashboard-clave': CLAVE_GUARDADA } }),
+        fetch('/api/tecnicos', { headers: { 'x-dashboard-clave': CLAVE_GUARDADA } })
+      ]);
 
-      if (respuesta.status === 401) {
+      if (respuestaTickets.status === 401 || respuestaTecnicos.status === 401) {
         sessionStorage.removeItem('dashboardClave');
         mostrarPantallaClave('Clave incorrecta, intenta de nuevo.');
         return;
       }
 
-      todosLosTickets = await respuesta.json();
+      todosLosTickets = await respuestaTickets.json();
+      listaTecnicos = await respuestaTecnicos.json();
       mostrarDashboard();
       construirFiltroTecnicos();
       renderizarTodo();
@@ -246,9 +255,10 @@
   });
 
   function construirFiltroTecnicos() {
-    const tecnicos = Array.from(new Set(
-      todosLosTickets.map((t) => t.tecnicoAsignado).filter(Boolean)
-    )).sort();
+    // Combinamos la lista oficial de tecnicos con cualquier nombre asignado que
+    // no este en la lista (por si acaso), para no perder ningun caso.
+    const asignadosEnTickets = todosLosTickets.map((t) => t.tecnicoAsignado).filter(Boolean);
+    const tecnicos = Array.from(new Set([...listaTecnicos, ...asignadosEnTickets])).sort();
 
     const valorActual = filtroTecnico.value;
     filtroTecnico.innerHTML = '<option value="">Todos</option>';
@@ -274,12 +284,21 @@
     const sinAsignar = tickets.filter((t) => !t.tecnicoAsignado && t.estado !== 'Resuelto').length;
 
     tarjetasResumen.innerHTML = `
-      <div class="tarjeta"><div class="numero">${total}</div><div class="etiqueta">Total</div></div>
-      <div class="tarjeta"><div class="numero">${resueltos}</div><div class="etiqueta">Resueltos</div></div>
-      <div class="tarjeta"><div class="numero">${pendientes}</div><div class="etiqueta">Pendientes</div></div>
-      <div class="tarjeta"><div class="numero">${sinAsignar}</div><div class="etiqueta">Sin asignar</div></div>
+      <div class="tarjeta ${filtroRapido === null ? 'activa' : ''}" data-filtro=""><div class="numero">${total}</div><div class="etiqueta">Total</div></div>
+      <div class="tarjeta ${filtroRapido === 'resueltos' ? 'activa' : ''}" data-filtro="resueltos"><div class="numero">${resueltos}</div><div class="etiqueta">Resueltos</div></div>
+      <div class="tarjeta ${filtroRapido === 'pendientes' ? 'activa' : ''}" data-filtro="pendientes"><div class="numero">${pendientes}</div><div class="etiqueta">Pendientes</div></div>
+      <div class="tarjeta ${filtroRapido === 'sinAsignar' ? 'activa' : ''}" data-filtro="sinAsignar"><div class="numero">${sinAsignar}</div><div class="etiqueta">Sin asignar</div></div>
     `;
   }
+
+  tarjetasResumen.addEventListener('click', (e) => {
+    const tarjeta = e.target.closest('.tarjeta');
+    if (!tarjeta) return;
+    filtroRapido = tarjeta.dataset.filtro || null;
+    filtroEstado.value = '';
+    filtroTecnico.value = '';
+    renderizarTodo();
+  });
 
   function renderizarTabla(tickets) {
     if (tickets.length === 0) {
@@ -329,15 +348,24 @@
 
   function renderizarTodo() {
     let filtrados = todosLosTickets;
-    if (filtroEstado.value) filtrados = filtrados.filter((t) => t.estado === filtroEstado.value);
-    if (filtroTecnico.value) filtrados = filtrados.filter((t) => t.tecnicoAsignado === filtroTecnico.value);
 
-    renderizarTarjetas(filtrados);
+    if (filtroRapido === 'resueltos') {
+      filtrados = filtrados.filter((t) => t.estado === 'Resuelto');
+    } else if (filtroRapido === 'pendientes') {
+      filtrados = filtrados.filter((t) => t.estado !== 'Resuelto');
+    } else if (filtroRapido === 'sinAsignar') {
+      filtrados = filtrados.filter((t) => !t.tecnicoAsignado && t.estado !== 'Resuelto');
+    } else {
+      if (filtroEstado.value) filtrados = filtrados.filter((t) => t.estado === filtroEstado.value);
+      if (filtroTecnico.value) filtrados = filtrados.filter((t) => t.tecnicoAsignado === filtroTecnico.value);
+    }
+
+    renderizarTarjetas(todosLosTickets);
     renderizarTabla(filtrados);
   }
 
-  filtroEstado.addEventListener('change', renderizarTodo);
-  filtroTecnico.addEventListener('change', renderizarTodo);
+  filtroEstado.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
+  filtroTecnico.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
   document.getElementById('btn-actualizar').addEventListener('click', () => cargarTickets());
 
   // Actualizacion automatica cada 20 segundos

@@ -119,6 +119,11 @@ function esTecnicoAutorizado(nombre) {
   return TECNICOS_AUTORIZADOS.some((tecnico) => normalizarTexto(tecnico) === normalizado);
 }
 
+// Devuelve la lista completa de tecnicos autorizados, la tengan o no asignados ya
+app.get('/api/tecnicos', verificarClaveDashboard, (req, res) => {
+  res.json(TECNICOS_AUTORIZADOS);
+});
+
 // ---------- IA en la nube (Groq, gratis) ----------
 // Se usa como respaldo cuando el bot no reconoce la pregunta con palabras clave.
 // Funciona siempre, sin depender de que tu PC este prendido.
