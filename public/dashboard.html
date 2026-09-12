@@ -13,7 +13,6 @@
     color: #222;
   }
 
-  /* ---------- Pantalla de clave ---------- */
   #pantalla-clave {
     display: flex;
     justify-content: center;
@@ -32,7 +31,7 @@
   #caja-clave input {
     width: 100%;
     padding: 10px;
-    margin: 10px 0;
+    margin: 8px 0;
     border: 1px solid #ccc;
     border-radius: 6px;
   }
@@ -45,10 +44,10 @@
     border-radius: 6px;
     cursor: pointer;
     font-weight: bold;
+    margin-top: 6px;
   }
-  #error-clave { color: #d32f2f; font-size: 13px; min-height: 18px; }
+  #error-clave { color: #d32f2f; font-size: 13px; min-height: 18px; margin-top: 6px; }
 
-  /* ---------- Dashboard ---------- */
   #dashboard { display: none; }
 
   header {
@@ -62,9 +61,18 @@
     gap: 10px;
   }
   header h1 { font-size: 18px; margin: 0; }
-  header .actualizado { font-size: 12px; opacity: 0.85; }
+  header .info-derecha { display: flex; align-items: center; gap: 14px; font-size: 12px; }
+  header button#btn-salir {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+  }
 
-  .contenedor { padding: 16px; max-width: 1100px; margin: 0 auto; }
+  .contenedor { padding: 16px; max-width: 1200px; margin: 0 auto; }
 
   .tarjetas {
     display: flex;
@@ -87,12 +95,14 @@
   .tarjeta:hover { transform: translateY(-2px); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
   .tarjeta.activa { border-color: #25d366; }
   .tarjeta .numero { font-size: 26px; font-weight: bold; color: #075e54; }
+  .tarjeta.tarjeta-alerta .numero { color: #d32f2f; }
   .tarjeta .etiqueta { font-size: 12px; color: #666; }
 
   .filtros {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
+    align-items: flex-end;
     margin-bottom: 16px;
     background: white;
     padding: 12px;
@@ -107,20 +117,21 @@
     font-size: 13px;
   }
   .filtros button {
-    align-self: flex-end;
     padding: 8px 14px;
-    background: #075e54;
-    color: white;
     border: none;
     border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
   }
+  #btn-actualizar { background: #075e54; color: white; }
+  #btn-exportar { background: #217346; color: white; }
 
   table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
   th, td { padding: 10px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid #eee; vertical-align: top; }
   th { background: #f0f0f0; color: #333; position: sticky; top: 0; }
   tr:last-child td { border-bottom: none; }
+  tr.fila-atrasada { background: #fff3f0; }
+  tr.fila-atrasada td:first-child { border-left: 4px solid #d32f2f; }
 
   .badge {
     display: inline-block;
@@ -135,15 +146,52 @@
   .badge-En.espera, .badge-EnEspera { background: #ff9800; }
   .badge-Resuelto { background: #4caf50; }
 
+  .badge-atraso {
+    display: inline-block;
+    background: #d32f2f;
+    color: white;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 8px;
+    margin-top: 4px;
+  }
+
   .sin-asignar { color: #999; font-style: italic; }
   .vacio { text-align: center; padding: 40px; color: #888; }
 
-  @media (max-width: 700px) {
+  .acciones-fila { display: flex; flex-direction: column; gap: 4px; min-width: 130px; }
+  .acciones-fila button {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 11px;
+    color: white;
+    cursor: pointer;
+  }
+  .btn-fila-tomar { background: #2196f3; }
+  .btn-fila-resolver { background: #ff9800; }
+  .btn-fila-aprobar { background: #4caf50; }
+
+  .form-resolver-fila { margin-top: 6px; }
+  .form-resolver-fila textarea {
+    width: 100%;
+    font-size: 12px;
+    padding: 5px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-family: inherit;
+    resize: vertical;
+    margin-bottom: 4px;
+  }
+
+  @media (max-width: 800px) {
     table, thead, tbody, th, td, tr { display: block; }
     thead { display: none; }
     tr { background: white; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 8px; }
+    tr.fila-atrasada td:first-child { border-left: none; border-top: 4px solid #d32f2f; }
     td { border: none; padding: 4px 8px; }
     td::before { content: attr(data-etiqueta) ": "; font-weight: bold; color: #075e54; }
+    .acciones-fila { min-width: 0; }
   }
 </style>
 </head>
@@ -152,7 +200,8 @@
 <div id="pantalla-clave">
   <div id="caja-clave">
     <h2>🔒 Dashboard de Tickets</h2>
-    <input type="password" id="input-clave" placeholder="Clave de acceso">
+    <input type="text" id="input-usuario" placeholder="Tu nombre (ej: Juan Diego)">
+    <input type="password" id="input-clave" placeholder="Contraseña">
     <button id="btn-entrar-clave">Entrar</button>
     <div id="error-clave"></div>
   </div>
@@ -161,7 +210,11 @@
 <div id="dashboard">
   <header>
     <h1>📋 Dashboard de Tickets — Soporte Técnico</h1>
-    <span class="actualizado" id="ultima-actualizacion">Cargando...</span>
+    <div class="info-derecha">
+      <span id="usuario-conectado"></span>
+      <span class="actualizado" id="ultima-actualizacion">Cargando...</span>
+      <button id="btn-salir">Salir</button>
+    </div>
   </header>
 
   <div class="contenedor">
@@ -185,6 +238,7 @@
         </select>
       </div>
       <button id="btn-actualizar">🔄 Actualizar ahora</button>
+      <button id="btn-exportar">📥 Exportar a Excel</button>
     </div>
 
     <div id="contenedor-tabla"></div>
@@ -192,13 +246,17 @@
 </div>
 
 <script>
-  let CLAVE_GUARDADA = sessionStorage.getItem('dashboardClave') || '';
+  const UMBRAL_HORAS_ATRASO = 24; // tickets sin resolver con mas de este tiempo se marcan como atrasados
+
+  let usuarioActual = sessionStorage.getItem('dashboardUsuario') || '';
+  let claveActual = sessionStorage.getItem('dashboardClave') || '';
   let todosLosTickets = [];
   let listaTecnicos = [];
-  let filtroRapido = null; // 'resueltos' | 'pendientes' | 'sinAsignar' | null (usa los dropdowns)
+  let filtroRapido = null; // 'resueltos' | 'pendientes' | 'sinAsignar' | 'atrasados' | null
 
   const pantallaClave = document.getElementById('pantalla-clave');
   const dashboard = document.getElementById('dashboard');
+  const inputUsuario = document.getElementById('input-usuario');
   const inputClave = document.getElementById('input-clave');
   const errorClave = document.getElementById('error-clave');
   const filtroEstado = document.getElementById('filtro-estado');
@@ -206,17 +264,73 @@
   const contenedorTabla = document.getElementById('contenedor-tabla');
   const tarjetasResumen = document.getElementById('tarjetas-resumen');
   const ultimaActualizacion = document.getElementById('ultima-actualizacion');
+  const usuarioConectado = document.getElementById('usuario-conectado');
 
-  async function cargarTickets(mostrarErrorSiFalla = true) {
+  function cabecerasAuth() {
+    return { 'x-dashboard-usuario': usuarioActual, 'x-dashboard-clave': claveActual };
+  }
+
+  async function iniciarSesion() {
+    const usuario = inputUsuario.value.trim();
+    const clave = inputClave.value;
+    if (!usuario || !clave) return;
+
+    try {
+      const respuesta = await fetch('/api/dashboard-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario, clave })
+      });
+
+      if (!respuesta.ok) {
+        errorClave.textContent = 'Usuario o contraseña incorrectos.';
+        return;
+      }
+
+      usuarioActual = usuario;
+      claveActual = clave;
+      sessionStorage.setItem('dashboardUsuario', usuario);
+      sessionStorage.setItem('dashboardClave', clave);
+      cargarTodo();
+    } catch (err) {
+      errorClave.textContent = 'No se pudo conectar con el servidor.';
+    }
+  }
+
+  document.getElementById('btn-entrar-clave').addEventListener('click', iniciarSesion);
+  inputClave.addEventListener('keypress', (e) => { if (e.key === 'Enter') iniciarSesion(); });
+
+  document.getElementById('btn-salir').addEventListener('click', () => {
+    sessionStorage.removeItem('dashboardUsuario');
+    sessionStorage.removeItem('dashboardClave');
+    usuarioActual = '';
+    claveActual = '';
+    mostrarPantallaClave();
+  });
+
+  function mostrarPantallaClave(mensajeError) {
+    pantallaClave.style.display = 'flex';
+    dashboard.style.display = 'none';
+    errorClave.textContent = mensajeError || '';
+  }
+
+  function mostrarDashboard() {
+    pantallaClave.style.display = 'none';
+    dashboard.style.display = 'block';
+    usuarioConectado.textContent = '👤 ' + usuarioActual;
+  }
+
+  async function cargarTodo(mostrarErrorSiFalla = true) {
     try {
       const [respuestaTickets, respuestaTecnicos] = await Promise.all([
-        fetch('/api/tickets', { headers: { 'x-dashboard-clave': CLAVE_GUARDADA } }),
-        fetch('/api/tecnicos', { headers: { 'x-dashboard-clave': CLAVE_GUARDADA } })
+        fetch('/api/tickets', { headers: cabecerasAuth() }),
+        fetch('/api/tecnicos', { headers: cabecerasAuth() })
       ]);
 
       if (respuestaTickets.status === 401 || respuestaTecnicos.status === 401) {
+        sessionStorage.removeItem('dashboardUsuario');
         sessionStorage.removeItem('dashboardClave');
-        mostrarPantallaClave('Clave incorrecta, intenta de nuevo.');
+        mostrarPantallaClave('Tu sesión expiró o no es válida. Entra de nuevo.');
         return;
       }
 
@@ -231,32 +345,7 @@
     }
   }
 
-  function mostrarPantallaClave(mensajeError) {
-    pantallaClave.style.display = 'flex';
-    dashboard.style.display = 'none';
-    errorClave.textContent = mensajeError || '';
-  }
-
-  function mostrarDashboard() {
-    pantallaClave.style.display = 'none';
-    dashboard.style.display = 'block';
-  }
-
-  document.getElementById('btn-entrar-clave').addEventListener('click', () => {
-    const clave = inputClave.value.trim();
-    if (!clave) return;
-    CLAVE_GUARDADA = clave;
-    sessionStorage.setItem('dashboardClave', clave);
-    cargarTickets();
-  });
-
-  inputClave.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') document.getElementById('btn-entrar-clave').click();
-  });
-
   function construirFiltroTecnicos() {
-    // Combinamos la lista oficial de tecnicos con cualquier nombre asignado que
-    // no este en la lista (por si acaso), para no perder ningun caso.
     const asignadosEnTickets = todosLosTickets.map((t) => t.tecnicoAsignado).filter(Boolean);
     const tecnicos = Array.from(new Set([...listaTecnicos, ...asignadosEnTickets])).sort();
 
@@ -277,17 +366,27 @@
     return div.innerHTML;
   }
 
+  function horasDesde(fecha) {
+    return (Date.now() - new Date(fecha).getTime()) / (1000 * 60 * 60);
+  }
+
+  function estaAtrasado(ticket) {
+    return ticket.estado !== 'Resuelto' && horasDesde(ticket.fechaCreacion) > UMBRAL_HORAS_ATRASO;
+  }
+
   function renderizarTarjetas(tickets) {
     const total = tickets.length;
     const resueltos = tickets.filter((t) => t.estado === 'Resuelto').length;
     const pendientes = total - resueltos;
     const sinAsignar = tickets.filter((t) => !t.tecnicoAsignado && t.estado !== 'Resuelto').length;
+    const atrasados = tickets.filter(estaAtrasado).length;
 
     tarjetasResumen.innerHTML = `
       <div class="tarjeta ${filtroRapido === null ? 'activa' : ''}" data-filtro=""><div class="numero">${total}</div><div class="etiqueta">Total</div></div>
       <div class="tarjeta ${filtroRapido === 'resueltos' ? 'activa' : ''}" data-filtro="resueltos"><div class="numero">${resueltos}</div><div class="etiqueta">Resueltos</div></div>
       <div class="tarjeta ${filtroRapido === 'pendientes' ? 'activa' : ''}" data-filtro="pendientes"><div class="numero">${pendientes}</div><div class="etiqueta">Pendientes</div></div>
       <div class="tarjeta ${filtroRapido === 'sinAsignar' ? 'activa' : ''}" data-filtro="sinAsignar"><div class="numero">${sinAsignar}</div><div class="etiqueta">Sin asignar</div></div>
+      <div class="tarjeta tarjeta-alerta ${filtroRapido === 'atrasados' ? 'activa' : ''}" data-filtro="atrasados"><div class="numero">${atrasados}</div><div class="etiqueta">⚠️ Atrasados (+${UMBRAL_HORAS_ATRASO}h)</div></div>
     `;
   }
 
@@ -299,6 +398,23 @@
     filtroTecnico.value = '';
     renderizarTodo();
   });
+
+  function obtenerTicketsFiltrados() {
+    let filtrados = todosLosTickets;
+    if (filtroRapido === 'resueltos') {
+      filtrados = filtrados.filter((t) => t.estado === 'Resuelto');
+    } else if (filtroRapido === 'pendientes') {
+      filtrados = filtrados.filter((t) => t.estado !== 'Resuelto');
+    } else if (filtroRapido === 'sinAsignar') {
+      filtrados = filtrados.filter((t) => !t.tecnicoAsignado && t.estado !== 'Resuelto');
+    } else if (filtroRapido === 'atrasados') {
+      filtrados = filtrados.filter(estaAtrasado);
+    } else {
+      if (filtroEstado.value) filtrados = filtrados.filter((t) => t.estado === filtroEstado.value);
+      if (filtroTecnico.value) filtrados = filtrados.filter((t) => t.tecnicoAsignado === filtroTecnico.value);
+    }
+    return filtrados;
+  }
 
   function renderizarTabla(tickets) {
     if (tickets.length === 0) {
@@ -312,10 +428,20 @@
         ? escaparHTML(t.tecnicoAsignado)
         : '<span class="sin-asignar">Sin asignar</span>';
       const fecha = t.fechaCreacion ? new Date(t.fechaCreacion).toLocaleString('es-CO') : '';
+      const atrasado = estaAtrasado(t);
+      const badgeAtraso = atrasado ? `<div class="badge-atraso">⚠️ ${Math.floor(horasDesde(t.fechaCreacion))}h sin resolver</div>` : '';
+
+      let botonesAccion = '';
+      if (t.estado !== 'Resuelto') {
+        botonesAccion += `<button type="button" class="btn-fila-tomar" data-accion="tomar" data-numero="${escaparHTML(t.numero)}">🧑‍💻 Tomar</button>`;
+        botonesAccion += `<button type="button" class="btn-fila-resolver" data-accion="mostrar-resolver" data-numero="${escaparHTML(t.numero)}">✅ Resolver</button>`;
+      } else if (!t.aprobadoParaConocimiento) {
+        botonesAccion += `<button type="button" class="btn-fila-aprobar" data-accion="aprobar" data-numero="${escaparHTML(t.numero)}">🧠 Aprobar</button>`;
+      }
 
       return `
-        <tr>
-          <td data-etiqueta="Ticket"><strong>#${escaparHTML(t.numero)}</strong></td>
+        <tr class="${atrasado ? 'fila-atrasada' : ''}" data-fila="${escaparHTML(t.numero)}">
+          <td data-etiqueta="Ticket"><strong>#${escaparHTML(t.numero)}</strong>${badgeAtraso}</td>
           <td data-etiqueta="Categoría">${escaparHTML(t.categoria)}</td>
           <td data-etiqueta="Estado"><span class="badge ${claseBadge}">${escaparHTML(t.estado)}</span></td>
           <td data-etiqueta="Creado por">${escaparHTML(t.nombre)}</td>
@@ -323,6 +449,7 @@
           <td data-etiqueta="Incidencia">${escaparHTML(t.descripcion)}</td>
           <td data-etiqueta="Técnico asignado">${tecnicoHtml}</td>
           <td data-etiqueta="Fecha">${fecha}</td>
+          <td data-etiqueta="Acciones"><div class="acciones-fila">${botonesAccion}</div></td>
         </tr>
       `;
     }).join('');
@@ -339,6 +466,7 @@
             <th>Incidencia</th>
             <th>Técnico asignado</th>
             <th>Fecha</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>${filas}</tbody>
@@ -347,33 +475,93 @@
   }
 
   function renderizarTodo() {
-    let filtrados = todosLosTickets;
-
-    if (filtroRapido === 'resueltos') {
-      filtrados = filtrados.filter((t) => t.estado === 'Resuelto');
-    } else if (filtroRapido === 'pendientes') {
-      filtrados = filtrados.filter((t) => t.estado !== 'Resuelto');
-    } else if (filtroRapido === 'sinAsignar') {
-      filtrados = filtrados.filter((t) => !t.tecnicoAsignado && t.estado !== 'Resuelto');
-    } else {
-      if (filtroEstado.value) filtrados = filtrados.filter((t) => t.estado === filtroEstado.value);
-      if (filtroTecnico.value) filtrados = filtrados.filter((t) => t.tecnicoAsignado === filtroTecnico.value);
-    }
-
+    const filtrados = obtenerTicketsFiltrados();
     renderizarTarjetas(todosLosTickets);
     renderizarTabla(filtrados);
   }
 
   filtroEstado.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
   filtroTecnico.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
-  document.getElementById('btn-actualizar').addEventListener('click', () => cargarTickets());
+  document.getElementById('btn-actualizar').addEventListener('click', () => cargarTodo());
 
-  // Actualizacion automatica cada 20 segundos
-  setInterval(() => cargarTickets(false), 20000);
+  async function llamarAccion(numero, accion, cuerpo) {
+    try {
+      const respuesta = await fetch(`/api/tickets/${encodeURIComponent(numero)}/${accion}`, {
+        method: 'POST',
+        headers: { ...cabecerasAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo || {})
+      });
+      const datos = await respuesta.json();
+      if (!respuesta.ok) {
+        alert(datos.error || 'No se pudo completar la acción.');
+        return;
+      }
+      cargarTodo(false);
+    } catch (err) {
+      alert('No se pudo conectar con el servidor.');
+    }
+  }
 
-  // Si ya habia una clave guardada en esta pestaña, entrar directo
-  if (CLAVE_GUARDADA) {
-    cargarTickets();
+  contenedorTabla.addEventListener('click', (e) => {
+    const boton = e.target.closest('button[data-accion]');
+    if (!boton) return;
+    const numero = boton.dataset.numero;
+    const accion = boton.dataset.accion;
+
+    if (accion === 'tomar') {
+      llamarAccion(numero, 'tomar');
+    } else if (accion === 'aprobar') {
+      llamarAccion(numero, 'aprobar');
+    } else if (accion === 'mostrar-resolver') {
+      const fila = contenedorTabla.querySelector(`tr[data-fila="${CSS.escape(numero)}"]`);
+      if (!fila || fila.querySelector('.form-resolver-fila')) return;
+      const celdaAcciones = fila.querySelector('.acciones-fila');
+      const form = document.createElement('div');
+      form.classList.add('form-resolver-fila');
+      form.innerHTML = `
+        <textarea rows="2" placeholder="Escribe la solución..."></textarea>
+        <button type="button" class="btn-fila-resolver" style="width:100%;">Confirmar</button>
+      `;
+      form.querySelector('button').addEventListener('click', () => {
+        const solucion = form.querySelector('textarea').value.trim();
+        if (!solucion) return;
+        llamarAccion(numero, 'resolver', { solucion });
+      });
+      celdaAcciones.appendChild(form);
+    }
+  });
+
+  document.getElementById('btn-exportar').addEventListener('click', () => {
+    const tickets = obtenerTicketsFiltrados();
+    if (tickets.length === 0) { alert('No hay tickets para exportar con el filtro actual.'); return; }
+
+    const encabezados = ['Ticket', 'Categoría', 'Estado', 'Creado por', 'Área', 'Cargo', 'Extensión', 'Incidencia', 'Técnico asignado', 'Solución', 'Fecha creación'];
+    const filas = tickets.map((t) => [
+      t.numero, t.categoria, t.estado, t.nombre, t.area || '', t.cargo || '', t.extension || '',
+      t.descripcion, t.tecnicoAsignado || 'Sin asignar', t.solucion || '',
+      t.fechaCreacion ? new Date(t.fechaCreacion).toLocaleString('es-CO') : ''
+    ]);
+
+    function celdaCSV(valor) {
+      const texto = String(valor == null ? '' : valor).replace(/"/g, '""');
+      return `"${texto}"`;
+    }
+
+    const contenidoCSV = [encabezados, ...filas]
+      .map((fila) => fila.map(celdaCSV).join(','))
+      .join('\r\n');
+
+    const blob = new Blob(['\uFEFF' + contenidoCSV], { type: 'text/csv;charset=utf-8;' });
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(blob);
+    enlace.download = `tickets-soporte-tecnico-${new Date().toISOString().slice(0, 10)}.csv`;
+    enlace.click();
+  });
+
+  setInterval(() => cargarTodo(false), 20000);
+
+  if (usuarioActual && claveActual) {
+    cargarTodo();
   } else {
     mostrarPantallaClave();
   }

@@ -16,15 +16,27 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // ---------- API del Dashboard de tickets (herramienta separada del chat) ----------
-// Protegida con una clave simple. Configura DASHBOARD_CLAVE en Render.
-// El dashboard (public/dashboard.html) la pide una sola vez y la guarda en el navegador.
-const DASHBOARD_CLAVE = process.env.DASHBOARD_CLAVE || 'cambia-esta-clave';
+// Cada tecnico tiene su propio usuario y contraseña. Cambia las contraseñas aqui
+// cuando quieras (son las que cada tecnico usa para entrar al dashboard).
+const CREDENCIALES_DASHBOARD = {
+  'Juan Diego': 'JuanDiego2026',
+  'Juan Pablo': 'JuanPablo2026',
+  'Juan Jose': 'JuanJose2026',
+  'Julian': 'Julian2026',
+  'Yin Carlos': 'YinCarlos2026',
+  'William David': 'WilliamDavid2026',
+  'Henrry': 'Henrry2026',
+  'Hector': 'Hector2026',
+  'Kevin Daniel': 'KevinDaniel2026'
+};
 
-function verificarClaveDashboard(req, res, next) {
+function verificarCredencialesDashboard(req, res, next) {
+  const usuario = req.headers['x-dashboard-usuario'];
   const clave = req.headers['x-dashboard-clave'];
-  if (clave !== DASHBOARD_CLAVE) {
-    return res.status(401).json({ error: 'Clave incorrecta' });
+  if (!usuario || !CREDENCIALES_DASHBOARD[usuario] || CREDENCIALES_DASHBOARD[usuario] !== clave) {
+    return res.status(401).json({ error: 'Usuario o clave incorrectos' });
   }
+  req.tecnicoDashboard = usuario;
   next();
 }
 
@@ -88,9 +100,30 @@ async function generarNumeroTicket() {
   return `T-${4580 + total + 1}`;
 }
 
+// Registro de quien entra al dashboard y cuando (para trazabilidad)
+const accesoDashboardSchema = new mongoose.Schema({
+  tecnico: String,
+  fecha: { type: Date, default: Date.now }
+});
+const AccesoDashboard = mongoose.model('AccesoDashboard', accesoDashboardSchema);
+
+// El dashboard llama esto una vez, al iniciar sesion, para validar y dejar registro
+app.post('/api/dashboard-login', async (req, res) => {
+  const { usuario, clave } = req.body || {};
+  if (!usuario || !CREDENCIALES_DASHBOARD[usuario] || CREDENCIALES_DASHBOARD[usuario] !== clave) {
+    return res.status(401).json({ error: 'Usuario o clave incorrectos' });
+  }
+  try {
+    await new AccesoDashboard({ tecnico: usuario }).save();
+  } catch (err) {
+    console.error('Error registrando acceso al dashboard:', err.message);
+  }
+  res.json({ ok: true, tecnico: usuario });
+});
+
 // Devuelve todos los tickets (para el dashboard). Admite filtros opcionales por
 // query string: ?estado=Resuelto&tecnico=William%20David
-app.get('/api/tickets', verificarClaveDashboard, async (req, res) => {
+app.get('/api/tickets', verificarCredencialesDashboard, async (req, res) => {
   try {
     const filtro = {};
     if (req.query.estado) filtro.estado = req.query.estado;
@@ -101,6 +134,113 @@ app.get('/api/tickets', verificarClaveDashboard, async (req, res) => {
   } catch (err) {
     console.error('Error en /api/tickets:', err.message);
     res.status(500).json({ error: 'Error obteniendo los tickets' });
+  }
+});
+
+// Tomar un caso desde el dashboard
+app.post('/api/tickets/:numero/tomar', verificarCredencialesDashboard, async (req, res) => {
+  try {
+    const ticket = await Ticket.findOne({ numero: req.params.numero });
+    if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
+    if (ticket.estado === 'Resuelto') return res.status(400).json({ error: 'El ticket ya está resuelto' });
+
+    ticket.estado = 'En proceso';
+    ticket.tecnicoAsignado = req.tecnicoDashboard;
+    ticket.historial.push({ estado: 'En proceso' });
+    await ticket.save();
+
+    const mensajeTomado = {
+      sala: SALA_SOPORTE,
+      nombre: NOMBRE_BOT_SOPORTE,
+      texto: `🧑‍💻 ${req.tecnicoDashboard} tomó el ticket #${ticket.numero} (desde el dashboard) y está trabajando en tu caso, ${ticket.nombre}.`,
+      tipo: 'texto',
+      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+    };
+    await new Mensaje(mensajeTomado).save();
+    io.to(SALA_SOPORTE).emit('mensaje', mensajeTomado);
+
+    res.json({ ok: true, ticket });
+  } catch (err) {
+    console.error('Error tomando ticket desde el dashboard:', err.message);
+    res.status(500).json({ error: 'Error tomando el ticket' });
+  }
+});
+
+// Resolver un caso desde el dashboard
+app.post('/api/tickets/:numero/resolver', verificarCredencialesDashboard, async (req, res) => {
+  const { solucion } = req.body || {};
+  if (!solucion || !solucion.trim()) return res.status(400).json({ error: 'Falta la solución' });
+
+  try {
+    const ticket = await Ticket.findOne({ numero: req.params.numero });
+    if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
+
+    ticket.estado = 'Resuelto';
+    ticket.solucion = solucion.trim();
+    if (!ticket.tecnicoAsignado) ticket.tecnicoAsignado = req.tecnicoDashboard;
+    ticket.historial.push({ estado: 'Resuelto' });
+    await ticket.save();
+
+    const mensajeConfirmacion = {
+      sala: SALA_SOPORTE,
+      nombre: NOMBRE_BOT_SOPORTE,
+      texto: `✅ ${req.tecnicoDashboard} marcó el ticket #${ticket.numero} como resuelto (desde el dashboard).\n\nSolución: ${ticket.solucion}`,
+      tipo: 'texto',
+      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+    };
+    await new Mensaje(mensajeConfirmacion).save();
+    io.to(SALA_SOPORTE).emit('mensaje', mensajeConfirmacion);
+
+    res.json({ ok: true, ticket });
+  } catch (err) {
+    console.error('Error resolviendo ticket desde el dashboard:', err.message);
+    res.status(500).json({ error: 'Error resolviendo el ticket' });
+  }
+});
+
+// Aprobar la solucion de un ticket resuelto para la base de conocimiento, desde el dashboard
+app.post('/api/tickets/:numero/aprobar', verificarCredencialesDashboard, async (req, res) => {
+  try {
+    const ticket = await Ticket.findOne({ numero: req.params.numero });
+    if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
+    if (ticket.estado !== 'Resuelto' || !ticket.solucion) {
+      return res.status(400).json({ error: 'El ticket todavía no tiene una solución registrada' });
+    }
+    if (ticket.aprobadoParaConocimiento) {
+      return res.status(400).json({ error: 'Esta solución ya había sido aprobada' });
+    }
+
+    ticket.aprobadoParaConocimiento = true;
+    await ticket.save();
+
+    const textoDescripcion = normalizarTexto(ticket.descripcion);
+    const palabrasClave = Array.from(new Set(
+      [textoDescripcion, ...textoDescripcion.split(' ').filter((palabra) => palabra.length > 3)]
+    ));
+    preguntasFrecuentes.push({ pregunta: ticket.descripcion, palabrasClave, respuesta: ticket.solucion });
+
+    await new Conocimiento({
+      sala: SALA_SOPORTE,
+      pregunta: ticket.descripcion,
+      palabrasClave,
+      respuesta: ticket.solucion,
+      ticketOrigen: ticket.numero
+    }).save();
+
+    const mensajeAprobado = {
+      sala: SALA_SOPORTE,
+      nombre: NOMBRE_BOT_SOPORTE,
+      texto: `🧠 ${req.tecnicoDashboard} aprobó (desde el dashboard) la solución del ticket #${ticket.numero}. A partir de ahora se usará automáticamente para casos parecidos.`,
+      tipo: 'texto',
+      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+    };
+    await new Mensaje(mensajeAprobado).save();
+    io.to(SALA_SOPORTE).emit('mensaje', mensajeAprobado);
+
+    res.json({ ok: true, ticket });
+  } catch (err) {
+    console.error('Error aprobando ticket desde el dashboard:', err.message);
+    res.status(500).json({ error: 'Error aprobando el ticket' });
   }
 });
 
@@ -120,7 +260,7 @@ function esTecnicoAutorizado(nombre) {
 }
 
 // Devuelve la lista completa de tecnicos autorizados, la tengan o no asignados ya
-app.get('/api/tecnicos', verificarClaveDashboard, (req, res) => {
+app.get('/api/tecnicos', verificarCredencialesDashboard, (req, res) => {
   res.json(TECNICOS_AUTORIZADOS);
 });
 
