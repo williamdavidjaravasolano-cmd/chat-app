@@ -82,7 +82,7 @@ function formatoDatosTicket({ area, nombre, cargo, extension, incidencia }) {
 // ---------- Tecnicos autorizados ----------
 // Solo estos nombres (tal como los escriben al entrar al chat) pueden usar
 // los comandos /tomar, /resolver y /aprobar. Agrega o quita nombres aqui.
-const TECNICOS_AUTORIZADOS = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Julian', 'Yin Carlos', 'William David', 'Henrry'];
+const TECNICOS_AUTORIZADOS = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Julian', 'Yin Carlos', 'William David', 'Henrry', 'Hector', 'Kevin Daniel'];
 
 function esTecnicoAutorizado(nombre) {
   const normalizado = normalizarTexto(nombre || '');
