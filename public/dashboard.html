@@ -237,6 +237,16 @@
           <option value="">Todos</option>
         </select>
       </div>
+      <div>
+        <label for="filtro-prioridad">Prioridad</label>
+        <select id="filtro-prioridad">
+          <option value="">Todas</option>
+          <option value="Urgente">🔴 Urgente</option>
+          <option value="Alta">🟠 Alta</option>
+          <option value="Media">🟡 Media</option>
+          <option value="Baja">🟢 Baja</option>
+        </select>
+      </div>
       <button id="btn-actualizar">🔄 Actualizar ahora</button>
       <button id="btn-exportar">📥 Exportar a Excel</button>
     </div>
@@ -261,6 +271,7 @@
   const errorClave = document.getElementById('error-clave');
   const filtroEstado = document.getElementById('filtro-estado');
   const filtroTecnico = document.getElementById('filtro-tecnico');
+  const filtroPrioridad = document.getElementById('filtro-prioridad');
   const contenedorTabla = document.getElementById('contenedor-tabla');
   const tarjetasResumen = document.getElementById('tarjetas-resumen');
   const ultimaActualizacion = document.getElementById('ultima-actualizacion');
@@ -412,9 +423,12 @@
     } else {
       if (filtroEstado.value) filtrados = filtrados.filter((t) => t.estado === filtroEstado.value);
       if (filtroTecnico.value) filtrados = filtrados.filter((t) => t.tecnicoAsignado === filtroTecnico.value);
+      if (filtroPrioridad.value) filtrados = filtrados.filter((t) => (t.prioridad || 'Media') === filtroPrioridad.value);
     }
     return filtrados;
   }
+
+  const iconosPrioridad = { Baja: '🟢', Media: '🟡', Alta: '🟠', Urgente: '🔴' };
 
   function renderizarTabla(tickets) {
     if (tickets.length === 0) {
@@ -430,6 +444,10 @@
       const fecha = t.fechaCreacion ? new Date(t.fechaCreacion).toLocaleString('es-CO') : '';
       const atrasado = estaAtrasado(t);
       const badgeAtraso = atrasado ? `<div class="badge-atraso">⚠️ ${Math.floor(horasDesde(t.fechaCreacion))}h sin resolver</div>` : '';
+      const prioridad = t.prioridad || 'Media';
+      const imagenHtml = t.imagenAdjunta
+        ? `<div><a href="#" data-accion="ver-imagen" data-numero="${escaparHTML(t.numero)}" style="font-size:12px;">📎 Ver captura</a></div>`
+        : '';
 
       let botonesAccion = '';
       if (t.estado !== 'Resuelto') {
@@ -443,10 +461,11 @@
         <tr class="${atrasado ? 'fila-atrasada' : ''}" data-fila="${escaparHTML(t.numero)}">
           <td data-etiqueta="Ticket"><strong>#${escaparHTML(t.numero)}</strong>${badgeAtraso}</td>
           <td data-etiqueta="Categoría">${escaparHTML(t.categoria)}</td>
+          <td data-etiqueta="Prioridad">${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</td>
           <td data-etiqueta="Estado"><span class="badge ${claseBadge}">${escaparHTML(t.estado)}</span></td>
           <td data-etiqueta="Creado por">${escaparHTML(t.nombre)}</td>
           <td data-etiqueta="Área / Cargo / Ext">${escaparHTML(t.area || 'N/A')} · ${escaparHTML(t.cargo || 'N/A')} · ${escaparHTML(t.extension || 'N/A')}</td>
-          <td data-etiqueta="Incidencia">${escaparHTML(t.descripcion)}</td>
+          <td data-etiqueta="Incidencia">${escaparHTML(t.descripcion)}${imagenHtml}</td>
           <td data-etiqueta="Técnico asignado">${tecnicoHtml}</td>
           <td data-etiqueta="Fecha">${fecha}</td>
           <td data-etiqueta="Acciones"><div class="acciones-fila">${botonesAccion}</div></td>
@@ -460,6 +479,7 @@
           <tr>
             <th>Ticket</th>
             <th>Categoría</th>
+            <th>Prioridad</th>
             <th>Estado</th>
             <th>Creado por</th>
             <th>Área / Cargo / Ext</th>
@@ -482,6 +502,7 @@
 
   filtroEstado.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
   filtroTecnico.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
+  filtroPrioridad.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
   document.getElementById('btn-actualizar').addEventListener('click', () => cargarTodo());
 
   async function llamarAccion(numero, accion, cuerpo) {
@@ -503,6 +524,17 @@
   }
 
   contenedorTabla.addEventListener('click', (e) => {
+    const enlaceImagen = e.target.closest('a[data-accion="ver-imagen"]');
+    if (enlaceImagen) {
+      e.preventDefault();
+      const ticket = todosLosTickets.find((t) => t.numero === enlaceImagen.dataset.numero);
+      if (ticket && ticket.imagenAdjunta) {
+        const ventana = window.open();
+        ventana.document.write(`<title>Captura — Ticket ${ticket.numero}</title><body style="margin:0; background:#222; display:flex; justify-content:center; align-items:center; min-height:100vh;"><img src="${ticket.imagenAdjunta}" style="max-width:100%; max-height:100vh;"></body>`);
+      }
+      return;
+    }
+
     const boton = e.target.closest('button[data-accion]');
     if (!boton) return;
     const numero = boton.dataset.numero;
@@ -535,9 +567,9 @@
     const tickets = obtenerTicketsFiltrados();
     if (tickets.length === 0) { alert('No hay tickets para exportar con el filtro actual.'); return; }
 
-    const encabezados = ['Ticket', 'Categoría', 'Estado', 'Creado por', 'Área', 'Cargo', 'Extensión', 'Incidencia', 'Técnico asignado', 'Solución', 'Fecha creación'];
+    const encabezados = ['Ticket', 'Categoría', 'Prioridad', 'Estado', 'Creado por', 'Área', 'Cargo', 'Extensión', 'Incidencia', 'Técnico asignado', 'Solución', 'Fecha creación'];
     const filas = tickets.map((t) => [
-      t.numero, t.categoria, t.estado, t.nombre, t.area || '', t.cargo || '', t.extension || '',
+      t.numero, t.categoria, t.prioridad || 'Media', t.estado, t.nombre, t.area || '', t.cargo || '', t.extension || '',
       t.descripcion, t.tecnicoAsignado || 'Sin asignar', t.solucion || '',
       t.fechaCreacion ? new Date(t.fechaCreacion).toLocaleString('es-CO') : ''
     ]);

@@ -81,6 +81,8 @@ const ticketSchema = new mongoose.Schema({
   numero: { type: String, unique: true },
   categoria: String,
   descripcion: String,
+  prioridad: { type: String, default: 'Media' }, // Baja, Media, Alta, Urgente
+  imagenAdjunta: { type: String, default: null }, // captura de pantalla en base64 (opcional)
   nombre: String, // quien creo el ticket
   area: { type: String, default: '' },
   cargo: { type: String, default: '' },
@@ -910,10 +912,11 @@ io.on('connection', (socket) => {
   // El usuario crea un ticket nuevo (categoria + descripcion del problema)
   // Si "escalar" es true, el usuario pidio hablar directo con un tecnico,
   // sin que el bot intente responder automaticamente con el FAQ.
-  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion, escalar }) => {
+  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion, escalar, prioridad, imagenAdjunta }) => {
     try {
       const numero = await generarNumeroTicket();
       const historial = [{ estado: 'Creado' }];
+      const prioridadFinal = ['Baja', 'Media', 'Alta', 'Urgente'].includes(prioridad) ? prioridad : 'Media';
 
       // Si la descripcion coincide con una pregunta frecuente, damos una respuesta rapida
       // (a menos que el usuario haya pedido escalar directo a un tecnico)
@@ -933,6 +936,8 @@ io.on('connection', (socket) => {
         numero,
         categoria,
         descripcion,
+        prioridad: prioridadFinal,
+        imagenAdjunta: imagenAdjunta || null,
         nombre,
         area: areaActual,
         cargo: cargoActual,
@@ -945,10 +950,12 @@ io.on('connection', (socket) => {
       socket.emit('ticket-creado', ticketGuardado);
 
       // Anunciamos el ticket en el chat de la sala, con los datos completos
+      const iconosPrioridad = { Baja: '🟢', Media: '🟡', Alta: '🟠', Urgente: '🔴' };
+      const etiquetaPrioridad = `${iconosPrioridad[prioridadFinal] || '🟡'} Prioridad: ${prioridadFinal}`;
       const datosTicket = formatoDatosTicket({ area: areaActual, nombre, cargo: cargoActual, extension: extActual, incidencia: descripcion });
       const textoAnuncio = escalar
-        ? `🙋 ${nombre} solicitó hablar con un técnico. Ticket #${numero} (${categoria}), en espera de atención.\n\n${datosTicket}`
-        : `🎫 Se creó el ticket #${numero} (${categoria}).\n\n${datosTicket}`;
+        ? `🙋 ${nombre} solicitó hablar con un técnico. Ticket #${numero} (${categoria}), en espera de atención.\n${etiquetaPrioridad}\n\n${datosTicket}`
+        : `🎫 Se creó el ticket #${numero} (${categoria}).\n${etiquetaPrioridad}\n\n${datosTicket}`;
 
       const mensajeTicket = {
         sala,
@@ -959,6 +966,19 @@ io.on('connection', (socket) => {
       };
       await new Mensaje(mensajeTicket).save();
       io.to(sala).emit('mensaje', mensajeTicket);
+
+      // Si se adjunto una captura, la enviamos tambien como mensaje de imagen en el chat
+      if (imagenAdjunta) {
+        const mensajeImagen = {
+          sala,
+          nombre,
+          texto: imagenAdjunta,
+          tipo: 'imagen',
+          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+        };
+        await new Mensaje(mensajeImagen).save();
+        io.to(sala).emit('mensaje', mensajeImagen);
+      }
 
       // Si encontramos una respuesta automatica para el problema, la enviamos tambien
       if (item) {

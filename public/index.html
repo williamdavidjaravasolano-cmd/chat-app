@@ -756,6 +756,82 @@
     textarea.placeholder = 'Ej: la impresora no imprime desde ayer...';
     ticketPanel.appendChild(textarea);
 
+    // ---- Prioridad ----
+    const etiquetaPrioridad = document.createElement('div');
+    etiquetaPrioridad.textContent = '¿Qué tan urgente es?';
+    etiquetaPrioridad.style.cssText = 'font-size:13px; color:#555; margin-top:8px;';
+    ticketPanel.appendChild(etiquetaPrioridad);
+
+    const selectPrioridad = document.createElement('select');
+    selectPrioridad.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin:6px 0;';
+    [
+      { valor: 'Baja', texto: '🟢 Baja — puede esperar' },
+      { valor: 'Media', texto: '🟡 Media — normal' },
+      { valor: 'Alta', texto: '🟠 Alta — me está afectando el trabajo' },
+      { valor: 'Urgente', texto: '🔴 Urgente — no puedo trabajar' }
+    ].forEach(({ valor, texto }) => {
+      const opcion = document.createElement('option');
+      opcion.value = valor;
+      opcion.textContent = texto;
+      if (valor === 'Media') opcion.selected = true;
+      selectPrioridad.appendChild(opcion);
+    });
+    ticketPanel.appendChild(selectPrioridad);
+
+    // ---- Adjuntar captura de pantalla (opcional) ----
+    let imagenAdjuntaBase64 = null;
+
+    const botonAdjuntar = document.createElement('button');
+    botonAdjuntar.type = 'button';
+    botonAdjuntar.textContent = '📎 Adjuntar captura de pantalla (opcional)';
+    botonAdjuntar.style.cssText = 'background:#f0f0f0; color:#333; margin-top:6px;';
+    ticketPanel.appendChild(botonAdjuntar);
+
+    const inputArchivo = document.createElement('input');
+    inputArchivo.type = 'file';
+    inputArchivo.accept = 'image/*';
+    inputArchivo.style.display = 'none';
+    ticketPanel.appendChild(inputArchivo);
+
+    const previsualizacion = document.createElement('div');
+    previsualizacion.style.cssText = 'display:none; margin-top:8px; position:relative;';
+    const imgPreview = document.createElement('img');
+    imgPreview.style.cssText = 'max-width:100%; max-height:120px; border-radius:6px; display:block;';
+    const botonQuitar = document.createElement('button');
+    botonQuitar.type = 'button';
+    botonQuitar.textContent = '✖ Quitar imagen';
+    botonQuitar.style.cssText = 'background:#e53935; color:white; margin-top:4px; font-size:12px; padding:4px 8px;';
+    previsualizacion.appendChild(imgPreview);
+    previsualizacion.appendChild(botonQuitar);
+    ticketPanel.appendChild(previsualizacion);
+
+    botonAdjuntar.addEventListener('click', () => inputArchivo.click());
+
+    inputArchivo.addEventListener('change', () => {
+      const archivo = inputArchivo.files[0];
+      if (!archivo) return;
+      if (archivo.size > 4 * 1024 * 1024) {
+        alert('La imagen es muy pesada (máximo 4MB). Intenta con una captura más liviana.');
+        inputArchivo.value = '';
+        return;
+      }
+      const lector = new FileReader();
+      lector.onload = () => {
+        imagenAdjuntaBase64 = lector.result;
+        imgPreview.src = imagenAdjuntaBase64;
+        previsualizacion.style.display = 'block';
+        botonAdjuntar.style.display = 'none';
+      };
+      lector.readAsDataURL(archivo);
+    });
+
+    botonQuitar.addEventListener('click', () => {
+      imagenAdjuntaBase64 = null;
+      inputArchivo.value = '';
+      previsualizacion.style.display = 'none';
+      botonAdjuntar.style.display = 'block';
+    });
+
     const botonEnviar = document.createElement('button');
     botonEnviar.type = 'button';
     botonEnviar.textContent = escalar ? 'Enviar al técnico' : 'Crear ticket';
@@ -763,7 +839,15 @@
     botonEnviar.addEventListener('click', () => {
       const descripcion = textarea.value.trim();
       if (!descripcion) return;
-      socket.emit('crear-ticket', { nombre: miNombre, sala: miSala, categoria, descripcion, escalar: !!escalar });
+      socket.emit('crear-ticket', {
+        nombre: miNombre,
+        sala: miSala,
+        categoria,
+        descripcion,
+        escalar: !!escalar,
+        prioridad: selectPrioridad.value,
+        imagenAdjunta: imagenAdjuntaBase64
+      });
       ticketPanel.style.display = 'none';
     });
     ticketPanel.appendChild(botonEnviar);
@@ -777,6 +861,23 @@
     'En espera': '#ff9800',
     'Resuelto': '#4caf50'
   };
+
+  const iconosPrioridad = { Baja: '🟢', Media: '🟡', Alta: '🟠', Urgente: '🔴' };
+  const ordenPrioridad = { Urgente: 0, Alta: 1, Media: 2, Baja: 3 };
+
+  function ordenarPorPrioridad(tickets) {
+    return [...tickets].sort((a, b) => (ordenPrioridad[a.prioridad] ?? 2) - (ordenPrioridad[b.prioridad] ?? 2));
+  }
+
+  function badgePrioridad(ticket) {
+    const prioridad = ticket.prioridad || 'Media';
+    return `<span class="badge-estado" style="background:#555; margin-left:4px;">${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</span>`;
+  }
+
+  function imagenTicketHtml(ticket) {
+    if (!ticket.imagenAdjunta) return '';
+    return `<div class="descripcion-ticket"><img src="${ticket.imagenAdjunta}" alt="Captura adjunta" style="max-width:100%; max-height:150px; border-radius:6px; margin-top:4px; cursor:pointer;" onclick="window.open(this.src, '_blank')"></div>`;
+  }
 
   function construirPanelTickets(tickets, filtro) {
     ticketsPanel.innerHTML = '';
@@ -820,9 +921,10 @@
       item.innerHTML = `
         <div class="fila-superior">
           <strong>#${escaparHTML(ticket.numero)} — ${escaparHTML(ticket.categoria)}</strong>
-          <span class="badge-estado" style="background:${color};">${escaparHTML(ticket.estado)}</span>
+          <span class="badge-estado" style="background:${color};">${escaparHTML(ticket.estado)}</span>${badgePrioridad(ticket)}
         </div>
         <div class="descripcion-ticket">${escaparHTML(ticket.descripcion)}</div>
+        ${imagenTicketHtml(ticket)}
         ${datosHtml}
         ${tecnicoHtml}
         ${solucionHtml}
@@ -861,7 +963,7 @@
     });
     panelTecnico.appendChild(filtros);
 
-    const ticketsFiltrados = (filtro === 'Todos') ? tickets : tickets.filter((t) => t.estado === filtro);
+    const ticketsFiltrados = ordenarPorPrioridad((filtro === 'Todos') ? tickets : tickets.filter((t) => t.estado === filtro));
 
     if (ticketsFiltrados.length === 0) {
       const vacio = document.createElement('div');
@@ -889,10 +991,11 @@
       item.innerHTML = `
         <div class="fila-superior">
           <strong>#${escaparHTML(ticket.numero)} — ${escaparHTML(ticket.categoria)}</strong>
-          <span class="badge-estado" style="background:${color};">${escaparHTML(ticket.estado)}</span>
+          <span class="badge-estado" style="background:${color};">${escaparHTML(ticket.estado)}</span>${badgePrioridad(ticket)}
         </div>
         <div class="descripcion-ticket"><strong>De:</strong> ${escaparHTML(ticket.nombre)}</div>
         <div class="descripcion-ticket">${escaparHTML(ticket.descripcion)}</div>
+        ${imagenTicketHtml(ticket)}
         ${datosHtml}
         ${tecnicoHtml}
         ${solucionHtml}
