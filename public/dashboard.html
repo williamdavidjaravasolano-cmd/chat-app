@@ -325,10 +325,16 @@
     errorClave.textContent = mensajeError || '';
   }
 
+  const AUTORIZADOS_REPORTES = ['Hector', 'William David'];
+  function puedeVerReportes() {
+    return AUTORIZADOS_REPORTES.some((n) => n.toLowerCase() === usuarioActual.trim().toLowerCase());
+  }
+
   function mostrarDashboard() {
     pantallaClave.style.display = 'none';
     dashboard.style.display = 'block';
     usuarioConectado.textContent = '👤 ' + usuarioActual;
+    document.getElementById('btn-exportar').style.display = puedeVerReportes() ? 'inline-block' : 'none';
   }
 
   async function cargarTodo(mostrarErrorSiFalla = true) {
@@ -564,6 +570,7 @@
   });
 
   document.getElementById('btn-exportar').addEventListener('click', () => {
+    if (!puedeVerReportes()) { alert('No tienes autorización para exportar reportes.'); return; }
     const tickets = obtenerTicketsFiltrados();
     if (tickets.length === 0) { alert('No hay tickets para exportar con el filtro actual.'); return; }
 

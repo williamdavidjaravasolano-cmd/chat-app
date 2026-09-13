@@ -261,6 +261,13 @@ function esTecnicoAutorizado(nombre) {
   return TECNICOS_AUTORIZADOS.some((tecnico) => normalizarTexto(tecnico) === normalizado);
 }
 
+// Solo estos dos pueden ver el panel de Reportes (aunque sean tecnicos autorizados)
+const AUTORIZADOS_REPORTES = ['Hector', 'William David'];
+function puedeVerReportes(nombre) {
+  const normalizado = normalizarTexto(nombre || '');
+  return AUTORIZADOS_REPORTES.some((autorizado) => normalizarTexto(autorizado) === normalizado);
+}
+
 // Devuelve la lista completa de tecnicos autorizados, la tengan o no asignados ya
 app.get('/api/tecnicos', verificarCredencialesDashboard, (req, res) => {
   res.json(TECNICOS_AUTORIZADOS);
@@ -1189,7 +1196,7 @@ io.on('connection', (socket) => {
 
   // Calcula el resumen de metricas para el panel de reportes (solo tecnicos)
   socket.on('obtener-metricas', async () => {
-    if (!esTecnicoAutorizado(nombreActual)) {
+    if (!puedeVerReportes(nombreActual)) {
       socket.emit('metricas', null);
       return;
     }

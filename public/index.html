@@ -532,9 +532,14 @@
 
   // Debe coincidir con la lista TECNICOS_AUTORIZADOS de server.js
   const EQUIPO_TECNICO = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Julian', 'Yin Carlos', 'William David', 'Henrry', 'Hector', 'Kevin Daniel'];
+  const AUTORIZADOS_REPORTES = ['Hector', 'William David'];
   function esTecnicoActual() {
     const normalizado = miNombre.trim().toLowerCase();
     return EQUIPO_TECNICO.some((tecnico) => tecnico.toLowerCase() === normalizado);
+  }
+  function puedeVerReportes() {
+    const normalizado = miNombre.trim().toLowerCase();
+    return AUTORIZADOS_REPORTES.some((nombre) => nombre.toLowerCase() === normalizado);
   }
   const btnOpciones = document.getElementById('btn-opciones');
   const opcionesPanel = document.getElementById('opciones-panel');
@@ -672,7 +677,10 @@
     if (esSoporteTecnico && esTecnicoActual()) {
       opciones.push({ icono: '🛠️', texto: 'Panel técnico', accion: () => abrirPanel(panelTecnico, () => socket.emit('obtener-todos-tickets')) });
       opciones.push({ icono: '🧠', texto: 'Respuestas de la IA', accion: () => abrirPanel(panelIA, () => socket.emit('obtener-respuestas-ia')) });
-      opciones.push({ icono: '📊', texto: 'Reportes', accion: () => abrirPanel(panelReportes, () => socket.emit('obtener-metricas')) });
+    }
+
+    if (esSoporteTecnico && puedeVerReportes()) {
+      opciones.push({ icono: '📊', texto: 'Reportes', accion: () => abrirPanel(panelReportes, () => socket.emit('obtener-metricas', { nombre: miNombre })) });
     }
 
     if (preguntas) {
