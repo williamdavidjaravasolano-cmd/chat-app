@@ -112,6 +112,16 @@
     font-weight: bold;
     color: #0B4F6C;
   }
+  .etiqueta-ia {
+    display: inline-block;
+    font-size: 10px;
+    font-style: italic;
+    color: #6B4EA3;
+    background: #F1ECFA;
+    padding: 2px 8px;
+    border-radius: 8px;
+    margin: 2px 0 4px;
+  }
   .mensaje .hora {
     font-size: 10px;
     color: #888;
@@ -815,12 +825,10 @@
 
     botonAdjuntar.addEventListener('click', () => inputArchivo.click());
 
-    inputArchivo.addEventListener('change', () => {
-      const archivo = inputArchivo.files[0];
+    function adjuntarArchivo(archivo) {
       if (!archivo) return;
       if (archivo.size > 4 * 1024 * 1024) {
         alert('La imagen es muy pesada (máximo 4MB). Intenta con una captura más liviana.');
-        inputArchivo.value = '';
         return;
       }
       const lector = new FileReader();
@@ -831,6 +839,27 @@
         botonAdjuntar.style.display = 'none';
       };
       lector.readAsDataURL(archivo);
+    }
+
+    inputArchivo.addEventListener('change', () => {
+      adjuntarArchivo(inputArchivo.files[0]);
+      inputArchivo.value = '';
+    });
+
+    // Tambien se puede pegar (Ctrl+V) una captura copiada, directo en el cuadro de texto
+    textarea.addEventListener('paste', (evento) => {
+      const items = (evento.clipboardData || window.clipboardData)?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type && item.type.startsWith('image/')) {
+          const archivo = item.getAsFile();
+          if (archivo) {
+            evento.preventDefault();
+            adjuntarArchivo(archivo);
+          }
+          break;
+        }
+      }
     });
 
     botonQuitar.addEventListener('click', () => {
@@ -1241,15 +1270,11 @@
   });
 
   // ---------- Imagenes ----------
-  btnImagen.addEventListener('click', () => inputImagen.click());
-
-  inputImagen.addEventListener('change', () => {
-    const archivo = inputImagen.files[0];
+  function enviarImagen(archivo) {
     if (!archivo) return;
 
     if (archivo.size > 4 * 1024 * 1024) {
       alert('La imagen es muy pesada. Elige una de menos de 4 MB.');
-      inputImagen.value = '';
       return;
     }
 
@@ -1261,9 +1286,32 @@
         texto: lector.result,
         tipo: 'imagen'
       });
-      inputImagen.value = '';
     };
     lector.readAsDataURL(archivo);
+  }
+
+  btnImagen.addEventListener('click', () => inputImagen.click());
+
+  inputImagen.addEventListener('change', () => {
+    enviarImagen(inputImagen.files[0]);
+    inputImagen.value = '';
+  });
+
+  // Permite pegar una imagen copiada (Ctrl+V) directo en el campo de mensaje,
+  // por ejemplo una captura de pantalla copiada con la herramienta de recortes.
+  inputMensaje.addEventListener('paste', (evento) => {
+    const items = (evento.clipboardData || window.clipboardData)?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type && item.type.startsWith('image/')) {
+        const archivo = item.getAsFile();
+        if (archivo) {
+          evento.preventDefault();
+          enviarImagen(archivo);
+        }
+        break;
+      }
+    }
   });
 
   // ---------- Recepcion de mensajes ----------
@@ -1281,8 +1329,13 @@
       contenidoHtml = `<div class="texto">${escaparHTML(data.texto).replace(/\n/g, '<br>')}</div>`;
     }
 
+    const etiquetaIA = data.esRespuestaIA
+      ? `<div class="etiqueta-ia">🤖 Respuesta generada por IA</div>`
+      : '';
+
     div.innerHTML = `
       <div class="nombre">${escaparHTML(data.nombre)}</div>
+      ${etiquetaIA}
       ${contenidoHtml}
       <div class="hora">${data.hora || ''}</div>
     `;

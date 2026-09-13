@@ -820,7 +820,7 @@ io.on('connection', (socket) => {
       const respuestaIA = await preguntarIA(data.texto);
 
       if (respuestaIA) {
-        respuestaBot = `🤖 ${respuestaIA}`;
+        respuestaBot = respuestaIA;
       } else {
         respuestaBot = `No encontré una respuesta automática para esto, ${data.nombre}. Si el problema continúa, puedes escalarlo a un técnico con el botón 🙋 en el menú ☰.`;
       }
