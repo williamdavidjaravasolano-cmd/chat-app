@@ -1761,7 +1761,9 @@
       botonTicketIA.style.cssText = 'display:block; width:100%; margin-top:6px; background:#0B4F6C; color:white; padding:8px; border:none; border-radius:6px; cursor:pointer; font-size:12px;';
       botonTicketIA.addEventListener('click', () => {
         textoPrellenadoTicket = `${data.preguntaOrigen}\n\n(La IA ya sugirió: ${data.texto})`;
-        abrirPanel(ticketPanel, () => construirPanelTicket(false));
+        cerrarPaneles(ticketPanel);
+        ticketPanel.style.display = 'block';
+        mostrarFormularioTicket('❔ Otros', false);
       });
       div.appendChild(botonTicketIA);
     }
