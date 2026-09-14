@@ -193,6 +193,40 @@
     td::before { content: attr(data-etiqueta) ": "; font-weight: bold; color: #0B4F6C; }
     .acciones-fila { min-width: 0; }
   }
+  #btn-modo-oscuro-dash {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  body.modo-oscuro { background: #121212; color: #e6e6e6; }
+  body.modo-oscuro #caja-clave { background: #1e1e1e; color: #e6e6e6; }
+  body.modo-oscuro #caja-clave h2 { color: #6FB4E0; }
+  body.modo-oscuro #caja-clave input { background: #2a2a2a; color: #e6e6e6; border-color: #444; }
+  body.modo-oscuro .tarjeta,
+  body.modo-oscuro .filtros,
+  body.modo-oscuro table,
+  body.modo-oscuro tr {
+    background: #1e1e1e;
+    color: #e6e6e6;
+  }
+  body.modo-oscuro th { background: #262626; color: #e6e6e6; }
+  body.modo-oscuro td { border-color: #333; }
+  body.modo-oscuro tr.fila-atrasada { background: #3a2420; }
+  body.modo-oscuro .filtros select,
+  body.modo-oscuro .filtros input,
+  body.modo-oscuro .caja-busqueda {
+    background: #2a2a2a;
+    color: #e6e6e6;
+    border-color: #444;
+  }
+  body.modo-oscuro .sin-asignar { color: #888; }
+  body.modo-oscuro .vacio { color: #999; }
+  body.modo-oscuro .form-resolver-fila textarea { background: #2a2a2a; color: #e6e6e6; border-color: #444; }
 </style>
 </head>
 <body>
@@ -213,6 +247,7 @@
     <div class="info-derecha">
       <span id="usuario-conectado"></span>
       <span class="actualizado" id="ultima-actualizacion">Cargando...</span>
+      <button id="btn-modo-oscuro-dash" title="Modo oscuro">🌙</button>
       <button id="btn-salir">Salir</button>
     </div>
   </header>
@@ -247,6 +282,10 @@
           <option value="Baja">🟢 Baja</option>
         </select>
       </div>
+      <div>
+        <label for="busqueda-dashboard">Buscar</label>
+        <input type="text" id="busqueda-dashboard" placeholder="Número, nombre, palabra clave..." style="min-width:180px;">
+      </div>
       <button id="btn-actualizar">🔄 Actualizar ahora</button>
       <button id="btn-exportar">📥 Exportar a Excel</button>
     </div>
@@ -272,6 +311,18 @@
   const filtroEstado = document.getElementById('filtro-estado');
   const filtroTecnico = document.getElementById('filtro-tecnico');
   const filtroPrioridad = document.getElementById('filtro-prioridad');
+  const busquedaDashboard = document.getElementById('busqueda-dashboard');
+
+  const btnModoOscuroDash = document.getElementById('btn-modo-oscuro-dash');
+  function aplicarModoOscuroDash(activo) {
+    document.body.classList.toggle('modo-oscuro', activo);
+    btnModoOscuroDash.textContent = activo ? '☀️' : '🌙';
+    localStorage.setItem('modoOscuroDashboard', activo ? '1' : '0');
+  }
+  aplicarModoOscuroDash(localStorage.getItem('modoOscuroDashboard') === '1');
+  btnModoOscuroDash.addEventListener('click', () => {
+    aplicarModoOscuroDash(!document.body.classList.contains('modo-oscuro'));
+  });
   const contenedorTabla = document.getElementById('contenedor-tabla');
   const tarjetasResumen = document.getElementById('tarjetas-resumen');
   const ultimaActualizacion = document.getElementById('ultima-actualizacion');
@@ -431,6 +482,12 @@
       if (filtroTecnico.value) filtrados = filtrados.filter((t) => t.tecnicoAsignado === filtroTecnico.value);
       if (filtroPrioridad.value) filtrados = filtrados.filter((t) => (t.prioridad || 'Media') === filtroPrioridad.value);
     }
+    const termino = busquedaDashboard.value.trim().toLowerCase();
+    if (termino) {
+      filtrados = filtrados.filter((t) =>
+        `${t.numero} ${t.nombre} ${t.descripcion} ${t.categoria} ${t.tecnicoAsignado || ''}`.toLowerCase().includes(termino)
+      );
+    }
     return filtrados;
   }
 
@@ -509,6 +566,7 @@
   filtroEstado.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
   filtroTecnico.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
   filtroPrioridad.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
+  busquedaDashboard.addEventListener('input', () => renderizarTodo());
   document.getElementById('btn-actualizar').addEventListener('click', () => cargarTodo());
 
   async function llamarAccion(numero, accion, cuerpo) {

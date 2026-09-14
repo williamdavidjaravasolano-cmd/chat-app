@@ -122,6 +122,15 @@
     border-radius: 8px;
     margin: 2px 0 4px;
   }
+  .caja-busqueda {
+    width: 100%;
+    padding: 8px 10px;
+    margin: 8px 0;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 13px;
+    box-sizing: border-box;
+  }
   .mensaje .hora {
     font-size: 10px;
     color: #888;
@@ -468,6 +477,69 @@
     font-size: 14px;
   }
   .encuesta button:hover { background: #e0e0e0; }
+  /* ---------- Modo oscuro ---------- */
+  #btn-modo-oscuro {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 9px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-right: 6px;
+  }
+  #btn-modo-oscuro:hover { background: rgba(255,255,255,0.25); }
+
+  body.modo-oscuro { background: #121212; }
+  body.modo-oscuro #login-box,
+  body.modo-oscuro #chat-container { background: #1e1e1e; color: #e6e6e6; }
+  body.modo-oscuro #login-box h2 { color: #6FB4E0; }
+  body.modo-oscuro #login-box label { color: #aaa; }
+  body.modo-oscuro #mensajes { background: #171717; }
+  body.modo-oscuro .mensaje { background: #262626; color: #e6e6e6; }
+  body.modo-oscuro .mensaje.propio { background: #16425B; }
+  body.modo-oscuro .mensaje .hora { color: #999; }
+  body.modo-oscuro #login-box input,
+  body.modo-oscuro #login-box select,
+  body.modo-oscuro #input-mensaje,
+  body.modo-oscuro textarea,
+  body.modo-oscuro select,
+  body.modo-oscuro .caja-busqueda {
+    background: #2a2a2a;
+    color: #e6e6e6;
+    border-color: #444;
+  }
+  body.modo-oscuro #faq-panel,
+  body.modo-oscuro #ticket-panel,
+  body.modo-oscuro #tickets-panel,
+  body.modo-oscuro #panel-tecnico,
+  body.modo-oscuro #panel-ia,
+  body.modo-oscuro #panel-reportes,
+  body.modo-oscuro #opciones-panel {
+    background: #1e1e1e;
+    color: #e6e6e6;
+    border-color: #333;
+  }
+  body.modo-oscuro .item-ticket,
+  body.modo-oscuro .seccion-reporte,
+  body.modo-oscuro .fondo-barra {
+    background: #262626;
+    color: #e6e6e6;
+  }
+  body.modo-oscuro .faq-titulo { color: #6FB4E0; }
+  body.modo-oscuro .descripcion-ticket { color: #ccc; }
+  body.modo-oscuro #opciones-panel button,
+  body.modo-oscuro #faq-panel button,
+  body.modo-oscuro #ticket-panel button,
+  body.modo-oscuro .boton-volver {
+    background: #2a2a2a;
+    color: #e6e6e6;
+  }
+  body.modo-oscuro #opciones-panel button:hover,
+  body.modo-oscuro #faq-panel button:hover,
+  body.modo-oscuro #ticket-panel button:hover {
+    background: #16425B;
+  }
 </style>
 </head>
 <body>
@@ -487,7 +559,10 @@
 
 <div id="chat-container">
   <div id="chat-header">
-    <button id="btn-menu" title="Volver al menu">🏠 Menú</button>
+    <div style="display:flex; align-items:center;">
+      <button id="btn-menu" title="Volver al menu">🏠 Menú</button>
+      <button id="btn-modo-oscuro" title="Modo oscuro">🌙</button>
+    </div>
     <span>Chat Soporte Tecnico HGM</span>
     <span class="sala-nombre" id="sala-actual-label"></span>
   </div>
@@ -551,6 +626,18 @@
     const normalizado = miNombre.trim().toLowerCase();
     return AUTORIZADOS_REPORTES.some((nombre) => nombre.toLowerCase() === normalizado);
   }
+  // ---------- Modo oscuro ----------
+  const btnModoOscuro = document.getElementById('btn-modo-oscuro');
+  function aplicarModoOscuro(activo) {
+    document.body.classList.toggle('modo-oscuro', activo);
+    btnModoOscuro.textContent = activo ? '☀️' : '🌙';
+    localStorage.setItem('modoOscuroChat', activo ? '1' : '0');
+  }
+  aplicarModoOscuro(localStorage.getItem('modoOscuroChat') === '1');
+  btnModoOscuro.addEventListener('click', () => {
+    aplicarModoOscuro(!document.body.classList.contains('modo-oscuro'));
+  });
+
   const btnOpciones = document.getElementById('btn-opciones');
   const opcionesPanel = document.getElementById('opciones-panel');
   const btnEmoji = document.getElementById('btn-emoji');
@@ -931,6 +1018,12 @@
     });
     ticketsPanel.appendChild(filtros);
 
+    const cajaBusqueda = document.createElement('input');
+    cajaBusqueda.type = 'text';
+    cajaBusqueda.placeholder = '🔍 Buscar por número o palabra clave...';
+    cajaBusqueda.classList.add('caja-busqueda');
+    ticketsPanel.appendChild(cajaBusqueda);
+
     const ticketsFiltrados = (filtro === 'Todos') ? tickets : tickets.filter((t) => t.estado === filtro);
 
     if (ticketsFiltrados.length === 0) {
@@ -945,6 +1038,7 @@
     ticketsFiltrados.forEach((ticket) => {
       const item = document.createElement('div');
       item.classList.add('item-ticket');
+      item.dataset.busqueda = `${ticket.numero} ${ticket.descripcion} ${ticket.categoria}`.toLowerCase();
       const color = coloresEstado[ticket.estado] || '#999';
       const solucionHtml = ticket.solucion
         ? `<div class="descripcion-ticket"><strong>Solución:</strong> ${escaparHTML(ticket.solucion)}</div>`
@@ -967,6 +1061,13 @@
         ${solucionHtml}
       `;
       ticketsPanel.appendChild(item);
+    });
+
+    cajaBusqueda.addEventListener('input', () => {
+      const termino = cajaBusqueda.value.trim().toLowerCase();
+      ticketsPanel.querySelectorAll('.item-ticket').forEach((item) => {
+        item.style.display = item.dataset.busqueda.includes(termino) ? '' : 'none';
+      });
     });
 
     agregarBotonVolver(ticketsPanel);
@@ -1000,6 +1101,12 @@
     });
     panelTecnico.appendChild(filtros);
 
+    const cajaBusqueda = document.createElement('input');
+    cajaBusqueda.type = 'text';
+    cajaBusqueda.placeholder = '🔍 Buscar por número, nombre o palabra clave...';
+    cajaBusqueda.classList.add('caja-busqueda');
+    panelTecnico.appendChild(cajaBusqueda);
+
     const ticketsFiltrados = ordenarPorPrioridad((filtro === 'Todos') ? tickets : tickets.filter((t) => t.estado === filtro));
 
     if (ticketsFiltrados.length === 0) {
@@ -1014,6 +1121,7 @@
     ticketsFiltrados.forEach((ticket) => {
       const item = document.createElement('div');
       item.classList.add('item-ticket');
+      item.dataset.busqueda = `${ticket.numero} ${ticket.descripcion} ${ticket.categoria} ${ticket.nombre} ${ticket.tecnicoAsignado || ''}`.toLowerCase();
       const color = coloresEstado[ticket.estado] || '#999';
       const solucionHtml = ticket.solucion
         ? `<div class="descripcion-ticket"><strong>Solución:</strong> ${escaparHTML(ticket.solucion)}</div>`
@@ -1070,6 +1178,13 @@
 
       if (acciones.children.length > 0) item.appendChild(acciones);
       panelTecnico.appendChild(item);
+    });
+
+    cajaBusqueda.addEventListener('input', () => {
+      const termino = cajaBusqueda.value.trim().toLowerCase();
+      panelTecnico.querySelectorAll('.item-ticket').forEach((item) => {
+        item.style.display = item.dataset.busqueda.includes(termino) ? '' : 'none';
+      });
     });
 
     agregarBotonVolver(panelTecnico);
@@ -1187,6 +1302,37 @@
     });
   }
 
+  function descargarReporteCSV(metricas) {
+    function celda(valor) {
+      return `"${String(valor == null ? '' : valor).replace(/"/g, '""')}"`;
+    }
+    const filas = [];
+    filas.push(['Reporte de soporte técnico', new Date().toLocaleString('es-CO')]);
+    filas.push([]);
+    filas.push(['Total tickets', metricas.totalTickets]);
+    filas.push(['Resueltos', metricas.totalResueltos]);
+    filas.push(['Pendientes', metricas.totalPendientes]);
+    if (metricas.tiempoPromedioHoras !== null) {
+      filas.push(['Tiempo promedio de resolución (horas)', metricas.tiempoPromedioHoras.toFixed(1)]);
+    }
+    filas.push([]);
+    filas.push(['Tickets por categoría']);
+    Object.entries(metricas.porCategoria).forEach(([k, v]) => filas.push([k, v]));
+    filas.push([]);
+    filas.push(['Tickets por estado']);
+    Object.entries(metricas.porEstado).forEach(([k, v]) => filas.push([k, v]));
+    filas.push([]);
+    filas.push(['Casos resueltos por técnico']);
+    Object.entries(metricas.porTecnico).forEach(([k, v]) => filas.push([k, v]));
+
+    const contenidoCSV = filas.map((fila) => fila.map(celda).join(',')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + contenidoCSV], { type: 'text/csv;charset=utf-8;' });
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(blob);
+    enlace.download = `reporte-soporte-tecnico-${new Date().toISOString().slice(0, 10)}.csv`;
+    enlace.click();
+  }
+
   function construirPanelReportes(metricas) {
     panelReportes.innerHTML = '';
 
@@ -1219,6 +1365,13 @@
       tarjetas.appendChild(tarjeta);
     });
     panelReportes.appendChild(tarjetas);
+
+    const botonDescargar = document.createElement('button');
+    botonDescargar.type = 'button';
+    botonDescargar.textContent = '📥 Descargar reporte (Excel)';
+    botonDescargar.style.cssText = 'background:#217346; color:white; width:100%; margin-bottom:8px;';
+    botonDescargar.addEventListener('click', () => descargarReporteCSV(metricas));
+    panelReportes.appendChild(botonDescargar);
 
     // Tiempo promedio de resolucion
     if (metricas.tiempoPromedioHoras !== null) {
