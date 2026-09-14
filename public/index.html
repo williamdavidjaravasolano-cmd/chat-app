@@ -860,6 +860,7 @@
 
   // ---------- Sistema de tickets (Soporte Tecnico) ----------
   const categoriasTicket = ['💻 Equipos de cómputo', '🖨️ Impresoras', '📶 Red y conectividad', '💿 Software', '❔ Otros'];
+  let textoPrellenadoTicket = null; // se usa cuando se crea un ticket a partir de una respuesta de la IA
 
   const preguntasGuiadasPorCategoria = {
     '💻 Equipos de cómputo': [
@@ -962,6 +963,10 @@
     const textarea = document.createElement('textarea');
     textarea.rows = 3;
     textarea.placeholder = 'Ej: la impresora no imprime desde ayer...';
+    if (textoPrellenadoTicket) {
+      textarea.value = textoPrellenadoTicket;
+      textoPrellenadoTicket = null;
+    }
     ticketPanel.appendChild(textarea);
 
     // ---- Prioridad ----
@@ -1745,6 +1750,20 @@
       });
 
       div.appendChild(encuesta);
+    }
+
+    // Si fue la IA quien respondio, ofrecemos crear un ticket con la pregunta original,
+    // por si la respuesta no resolvio el problema (sin inventar portales externos)
+    if (data.esRespuestaIA && data.preguntaOrigen) {
+      const botonTicketIA = document.createElement('button');
+      botonTicketIA.type = 'button';
+      botonTicketIA.textContent = '🎫 ¿Sigue el problema? Crear ticket con esta información';
+      botonTicketIA.style.cssText = 'display:block; width:100%; margin-top:6px; background:#0B4F6C; color:white; padding:8px; border:none; border-radius:6px; cursor:pointer; font-size:12px;';
+      botonTicketIA.addEventListener('click', () => {
+        textoPrellenadoTicket = `${data.preguntaOrigen}\n\n(La IA ya sugirió: ${data.texto})`;
+        abrirPanel(ticketPanel, () => construirPanelTicket(false));
+      });
+      div.appendChild(botonTicketIA);
     }
 
     mensajesDiv.appendChild(div);
