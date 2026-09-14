@@ -138,6 +138,11 @@
   tr:last-child td { border-bottom: none; }
   tr.fila-atrasada { background: #fff3f0; }
   tr.fila-atrasada td:first-child { border-left: 4px solid #d32f2f; }
+  tr.fila-resumen { cursor: pointer; }
+  tr.fila-resumen:hover { background: #f5f9fc; }
+  .flecha-expandir { display:inline-block; font-size:10px; color:#0B4F6C; width:12px; }
+  tr.fila-detalle td { background:#fafbfc; padding:12px 16px; font-size:13px; line-height:1.5; }
+  tr.fila-detalle .acciones-fila button { width:auto; }
 
   .badge {
     display: inline-block;
@@ -224,6 +229,9 @@
   body.modo-oscuro th { background: #262626; color: #e6e6e6; }
   body.modo-oscuro td { border-color: #333; }
   body.modo-oscuro tr.fila-atrasada { background: #3a2420; }
+  body.modo-oscuro tr.fila-detalle td { background: #181818; }
+  body.modo-oscuro tr.fila-resumen:hover { background: #222; }
+  body.modo-oscuro .flecha-expandir { color: #6FB4E0; }
   body.modo-oscuro .filtros select,
   body.modo-oscuro .filtros input,
   body.modo-oscuro .caja-busqueda {
@@ -693,10 +701,14 @@
         : '<span class="sin-asignar">Sin asignar</span>';
       const fecha = t.fechaCreacion ? new Date(t.fechaCreacion).toLocaleString('es-CO') : '';
       const atrasado = estaAtrasado(t);
-      const badgeAtraso = atrasado ? `<div class="badge-atraso">⚠️ ${Math.floor(horasDesde(t.fechaCreacion))}h sin resolver</div>` : '';
       const prioridad = t.prioridad || 'Media';
+      const asunto = t.descripcion.length > 45 ? t.descripcion.slice(0, 45) + '…' : t.descripcion;
+
       const imagenHtml = t.imagenAdjunta
-        ? `<div><a href="#" data-accion="ver-imagen" data-numero="${escaparHTML(t.numero)}" style="font-size:12px;">📎 Ver captura</a></div>`
+        ? `<div style="margin-top:6px;"><a href="#" data-accion="ver-imagen" data-numero="${escaparHTML(t.numero)}" style="font-size:12px;">📎 Ver captura</a></div>`
+        : '';
+      const badgeAtrasoDetalle = atrasado
+        ? `<div class="badge-atraso" style="margin-bottom:6px;">⚠️ ${Math.floor(horasDesde(t.fechaCreacion))}h sin resolver</div>`
         : '';
 
       let botonesAccion = '';
@@ -707,20 +719,30 @@
         botonesAccion += `<button type="button" class="btn-fila-aprobar" data-accion="aprobar" data-numero="${escaparHTML(t.numero)}">🧠 Aprobar</button>`;
       }
 
-      return `
-        <tr class="${atrasado ? 'fila-atrasada' : ''}" data-fila="${escaparHTML(t.numero)}">
-          <td data-etiqueta="Ticket"><strong>#${escaparHTML(t.numero)}</strong>${badgeAtraso}</td>
-          <td data-etiqueta="Categoría">${escaparHTML(t.categoria)}</td>
-          <td data-etiqueta="Prioridad">${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</td>
-          <td data-etiqueta="Estado"><span class="badge ${claseBadge}">${escaparHTML(t.estado)}</span></td>
-          <td data-etiqueta="Creado por">${escaparHTML(t.nombre)}</td>
-          <td data-etiqueta="Área / Cargo / Ext">${escaparHTML(t.area || 'N/A')} · ${escaparHTML(t.cargo || 'N/A')} · ${escaparHTML(t.extension || 'N/A')}</td>
-          <td data-etiqueta="Incidencia">${escaparHTML(t.descripcion)}${imagenHtml}</td>
-          <td data-etiqueta="Técnico asignado">${tecnicoHtml}</td>
+      const filaResumen = `
+        <tr class="fila-resumen ${atrasado ? 'fila-atrasada' : ''}" data-fila-resumen="${escaparHTML(t.numero)}" data-accion="expandir" data-numero="${escaparHTML(t.numero)}">
+          <td data-etiqueta="Ticket"><span class="flecha-expandir">▶</span> <strong>#${escaparHTML(t.numero)}</strong></td>
+          <td data-etiqueta="Asunto">${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(asunto)}</td>
+          <td data-etiqueta="Reportado por">${escaparHTML(t.nombre)}</td>
           <td data-etiqueta="Fecha">${fecha}</td>
-          <td data-etiqueta="Acciones"><div class="acciones-fila">${botonesAccion}</div></td>
+          <td data-etiqueta="Estado"><span class="badge ${claseBadge}">${escaparHTML(t.estado)}</span></td>
+          <td data-etiqueta="Técnico">${tecnicoHtml}</td>
         </tr>
       `;
+
+      const filaDetalle = `
+        <tr class="fila-detalle" data-fila-detalle="${escaparHTML(t.numero)}" style="display:none;">
+          <td colspan="6">
+            ${badgeAtrasoDetalle}
+            <div style="margin-bottom:4px;"><strong>Categoría:</strong> ${escaparHTML(t.categoria)} &nbsp;·&nbsp; <strong>Prioridad:</strong> ${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</div>
+            <div style="margin-bottom:4px;"><strong>Área / Cargo / Ext:</strong> ${escaparHTML(t.area || 'N/A')} · ${escaparHTML(t.cargo || 'N/A')} · ${escaparHTML(t.extension || 'N/A')}</div>
+            <div style="margin-bottom:4px;"><strong>Incidencia completa:</strong> ${escaparHTML(t.descripcion)}${imagenHtml}</div>
+            <div class="acciones-fila" style="flex-direction:row; margin-top:8px;">${botonesAccion}</div>
+          </td>
+        </tr>
+      `;
+
+      return filaResumen + filaDetalle;
     }).join('');
 
     contenedorTabla.innerHTML = `
@@ -728,15 +750,11 @@
         <thead>
           <tr>
             <th>Ticket</th>
-            <th>Categoría</th>
-            <th>Prioridad</th>
-            <th>Estado</th>
-            <th>Creado por</th>
-            <th>Área / Cargo / Ext</th>
-            <th>Incidencia</th>
-            <th>Técnico asignado</th>
+            <th>Asunto</th>
+            <th>Reportado por</th>
             <th>Fecha</th>
-            <th>Acciones</th>
+            <th>Estado</th>
+            <th>Técnico</th>
           </tr>
         </thead>
         <tbody>${filas}</tbody>
@@ -787,7 +805,21 @@
     }
 
     const boton = e.target.closest('button[data-accion]');
-    if (!boton) return;
+    if (!boton) {
+      // Si no se hizo click en un boton ni en el enlace de imagen, revisamos si fue en la fila resumen (expandir/colapsar)
+      const filaResumen = e.target.closest('tr[data-accion="expandir"]');
+      if (filaResumen) {
+        const numero = filaResumen.dataset.numero;
+        const filaDetalle = contenedorTabla.querySelector(`tr[data-fila-detalle="${CSS.escape(numero)}"]`);
+        const flecha = filaResumen.querySelector('.flecha-expandir');
+        if (filaDetalle) {
+          const yaVisible = filaDetalle.style.display !== 'none';
+          filaDetalle.style.display = yaVisible ? 'none' : '';
+          if (flecha) flecha.textContent = yaVisible ? '▶' : '▼';
+        }
+      }
+      return;
+    }
     const numero = boton.dataset.numero;
     const accion = boton.dataset.accion;
 
@@ -796,9 +828,9 @@
     } else if (accion === 'aprobar') {
       llamarAccion(numero, 'aprobar');
     } else if (accion === 'mostrar-resolver') {
-      const fila = contenedorTabla.querySelector(`tr[data-fila="${CSS.escape(numero)}"]`);
-      if (!fila || fila.querySelector('.form-resolver-fila')) return;
-      const celdaAcciones = fila.querySelector('.acciones-fila');
+      const filaDetalle = contenedorTabla.querySelector(`tr[data-fila-detalle="${CSS.escape(numero)}"]`);
+      if (!filaDetalle || filaDetalle.querySelector('.form-resolver-fila')) return;
+      const celdaAcciones = filaDetalle.querySelector('.acciones-fila');
       const form = document.createElement('div');
       form.classList.add('form-resolver-fila');
       form.innerHTML = `
