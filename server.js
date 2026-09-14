@@ -496,7 +496,21 @@ io.on('connection', (socket) => {
   let extActual = '';
 
   // El usuario elige nombre y sala al entrar
-  socket.on('unirse-sala', async ({ nombre, sala, area, cargo, ext }) => {
+  socket.on('unirse-sala', async ({ nombre, sala, area, cargo, ext, clave }) => {
+    // Si el nombre coincide con un tecnico autorizado, exigimos la misma contraseña
+    // que se usa en el Dashboard, para que nadie pueda hacerse pasar por un tecnico
+    // con solo escribir su nombre.
+    const tecnicoCoincidente = TECNICOS_AUTORIZADOS.find(
+      (t) => normalizarTexto(t) === normalizarTexto(nombre || '')
+    );
+    if (tecnicoCoincidente) {
+      if (!clave || CREDENCIALES_DASHBOARD[tecnicoCoincidente] !== clave) {
+        socket.emit('error-login', 'Contraseña de técnico incorrecta.');
+        return;
+      }
+      nombre = tecnicoCoincidente; // usamos siempre la ortografia oficial del nombre
+    }
+
     salaActual = sala;
     nombreActual = nombre;
     areaActual = area || '';

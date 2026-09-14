@@ -576,6 +576,9 @@
   <h2>Soporte Técnico</h2>
   <input type="text" id="input-nombre" placeholder="Escribe tu nombre" maxlength="20">
 
+  <input type="password" id="input-clave-tecnico" placeholder="Contraseña de técnico" style="display:none;">
+  <div id="error-login-tecnico" style="display:none; color:#d32f2f; font-size:12px; margin:-6px 0 6px;"></div>
+
   <div id="campos-soporte">
     <input type="text" id="input-area" placeholder="Área (ej: Laboratorio)">
     <input type="text" id="input-cargo" placeholder="Cargo (ej: Enfermera jefe)">
@@ -626,6 +629,8 @@
   const loginBox = document.getElementById('login-box');
   const chatContainer = document.getElementById('chat-container');
   const inputNombre = document.getElementById('input-nombre');
+  const inputClaveTecnico = document.getElementById('input-clave-tecnico');
+  const errorLoginTecnico = document.getElementById('error-login-tecnico');
   const camposSoporte = document.getElementById('campos-soporte');
   const inputArea = document.getElementById('input-area');
   const inputCargo = document.getElementById('input-cargo');
@@ -677,23 +682,47 @@
 
   const SALA_UNICA = 'Soporte Tecnico';
 
+  function esNombreDeTecnico(nombre) {
+    const normalizado = nombre.trim().toLowerCase();
+    return EQUIPO_TECNICO.some((tecnico) => tecnico.toLowerCase() === normalizado);
+  }
+
+  inputNombre.addEventListener('input', () => {
+    const esTecnico = esNombreDeTecnico(inputNombre.value);
+    inputClaveTecnico.style.display = esTecnico ? 'block' : 'none';
+    errorLoginTecnico.style.display = 'none';
+    if (!esTecnico) inputClaveTecnico.value = '';
+  });
+
+  socket.on('error-login', (mensaje) => {
+    errorLoginTecnico.textContent = mensaje;
+    errorLoginTecnico.style.display = 'block';
+    btnEntrar.disabled = false;
+    btnEntrar.textContent = 'Entrar';
+    miNombre = '';
+    miSala = '';
+  });
+
   function entrarAlChat() {
     const nombre = inputNombre.value.trim();
     if (!nombre) return;
 
+    if (esNombreDeTecnico(nombre) && !inputClaveTecnico.value.trim()) {
+      errorLoginTecnico.textContent = 'Escribe la contraseña de técnico para continuar.';
+      errorLoginTecnico.style.display = 'block';
+      return;
+    }
+
     const area = inputArea.value.trim();
     const cargo = inputCargo.value.trim();
     const ext = inputExt.value.trim();
+    const clave = inputClaveTecnico.value;
 
     miNombre = nombre;
     miSala = SALA_UNICA;
-    socket.emit('unirse-sala', { nombre, sala: miSala, area, cargo, ext });
-    loginBox.style.display = 'none';
-    chatContainer.style.display = 'flex';
-    salaActualLabel.textContent = miSala;
-    mostrarFaqSiAplica(miSala);
-    pedirPermisoNotificaciones();
-    inputMensaje.focus();
+    btnEntrar.disabled = true;
+    btnEntrar.textContent = 'Entrando...';
+    socket.emit('unirse-sala', { nombre, sala: miSala, area, cargo, ext, clave });
   }
 
   btnMenu.addEventListener('click', () => {
@@ -1932,6 +1961,17 @@
   }
 
   socket.on('historial', (mensajes) => {
+    // Este evento solo llega si el login fue exitoso (nombre valido, y clave correcta si era tecnico)
+    if (loginBox.style.display !== 'none') {
+      loginBox.style.display = 'none';
+      chatContainer.style.display = 'flex';
+      salaActualLabel.textContent = miSala;
+      mostrarFaqSiAplica(miSala);
+      pedirPermisoNotificaciones();
+      btnEntrar.disabled = false;
+      btnEntrar.textContent = 'Entrar';
+      inputMensaje.focus();
+    }
     mensajesDiv.innerHTML = '';
     mensajes.forEach(pintarMensaje);
   });
