@@ -69,6 +69,36 @@ const mensajeSchema = new mongoose.Schema({
 });
 const Mensaje = mongoose.model('Mensaje', mensajeSchema);
 
+// ---------- Limpieza automatica del historial del chat cada 24 horas ----------
+// Borra TODOS los mensajes (chat general y conversaciones privadas de tickets).
+// No borra los tickets en si, ni el conocimiento aprendido, solo los mensajes de chat.
+const limpiezaHistorialSchema = new mongoose.Schema({
+  fecha: { type: Date, default: Date.now }
+});
+const LimpiezaHistorial = mongoose.model('LimpiezaHistorial', limpiezaHistorialSchema);
+
+async function revisarYLimpiarHistorial() {
+  try {
+    let registro = await LimpiezaHistorial.findOne({});
+    if (!registro) {
+      // Primera vez que corre: solo dejamos la marca de tiempo, sin borrar nada todavia.
+      await new LimpiezaHistorial({ fecha: new Date() }).save();
+      return;
+    }
+
+    const horasTranscurridas = (Date.now() - registro.fecha.getTime()) / (1000 * 60 * 60);
+    if (horasTranscurridas >= 24) {
+      const resultado = await Mensaje.deleteMany({});
+      registro.fecha = new Date();
+      await registro.save();
+      console.log(`Historial del chat borrado automáticamente (${resultado.deletedCount} mensajes eliminados).`);
+    }
+  } catch (err) {
+    console.error('Error revisando/limpiando el historial del chat:', err.message);
+  }
+}
+
+
 // ---------- Modelo de votos de la encuesta de satisfaccion ----------
 const votoSchema = new mongoose.Schema({
   sala: String,
@@ -480,6 +510,10 @@ function buscarPreguntaFaq(lista, textoNormalizado) {
 // Al iniciar el servidor, cargamos las soluciones aprendidas de tickets
 // resueltos anteriormente, para que sigan funcionando aunque Render reinicie.
 mongoose.connection.once('open', async () => {
+  // Revisa de una vez si toca limpiar el historial, y despues cada 30 minutos
+  revisarYLimpiarHistorial();
+  setInterval(revisarYLimpiarHistorial, 30 * 60 * 1000);
+
   try {
     const aprendidos = await Conocimiento.find({});
     aprendidos.forEach((item) => {
