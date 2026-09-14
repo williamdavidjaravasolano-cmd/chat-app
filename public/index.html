@@ -1096,6 +1096,26 @@
     }
     ticketPanel.appendChild(textarea);
 
+    // ---- Tipo de servicio (segun el protocolo oficial de mesa de ayuda) ----
+    const etiquetaTipoServicio = document.createElement('div');
+    etiquetaTipoServicio.textContent = '¿Qué tipo de solicitud es?';
+    etiquetaTipoServicio.style.cssText = 'font-size:13px; color:#555; margin-top:8px;';
+    ticketPanel.appendChild(etiquetaTipoServicio);
+
+    const selectTipoServicio = document.createElement('select');
+    selectTipoServicio.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin:6px 0;';
+    [
+      { valor: 'Incidente', texto: '⚠️ Incidente — algo dejó de funcionar' },
+      { valor: 'Requerimiento', texto: '📝 Requerimiento — necesito algo nuevo o una mejora' }
+    ].forEach(({ valor, texto }) => {
+      const opcion = document.createElement('option');
+      opcion.value = valor;
+      opcion.textContent = texto;
+      if (valor === 'Incidente') opcion.selected = true;
+      selectTipoServicio.appendChild(opcion);
+    });
+    ticketPanel.appendChild(selectTipoServicio);
+
     // ---- Prioridad ----
     const etiquetaPrioridad = document.createElement('div');
     etiquetaPrioridad.textContent = '¿Qué tan urgente es?';
@@ -1226,6 +1246,7 @@
         descripcion,
         escalar: !!escalar,
         prioridad: selectPrioridad.value,
+        tipoServicio: selectTipoServicio.value,
         imagenAdjunta: imagenAdjuntaBase64
       });
       ticketPanel.style.display = 'none';

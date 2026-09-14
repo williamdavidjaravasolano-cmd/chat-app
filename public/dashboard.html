@@ -320,7 +320,11 @@
 </div>
 
 <script>
-  const UMBRAL_HORAS_ATRASO = 2; // tickets sin resolver con mas de este tiempo se marcan como atrasados
+  // Tiempos oficiales de atencion del protocolo de mesa de ayuda del HGM (en minutos)
+  const SLA_MINUTOS = {
+    Incidente: { Urgente: 30, Alta: 60, Media: 120, Baja: 240 },
+    Requerimiento: { Urgente: 30, Alta: 60, Media: 480, Baja: 2400 }
+  };
 
   // Permite instalar el dashboard como app en el celular (PWA)
   if ('serviceWorker' in navigator) {
@@ -524,8 +528,15 @@
     return (Date.now() - new Date(fecha).getTime()) / (1000 * 60 * 60);
   }
 
+  function obtenerSlaHoras(ticket) {
+    const tipo = SLA_MINUTOS[ticket.tipoServicio] ? ticket.tipoServicio : 'Incidente';
+    const prioridad = ticket.prioridad || 'Media';
+    const minutos = SLA_MINUTOS[tipo][prioridad] ?? SLA_MINUTOS.Incidente.Media;
+    return minutos / 60;
+  }
+
   function estaAtrasado(ticket) {
-    return ticket.estado !== 'Resuelto' && horasDesde(ticket.fechaCreacion) > UMBRAL_HORAS_ATRASO;
+    return ticket.estado !== 'Resuelto' && horasDesde(ticket.fechaCreacion) > obtenerSlaHoras(ticket);
   }
 
   // Grafico de media dona (SVG puro, sin librerias externas) para el resumen de casos,
@@ -649,7 +660,7 @@
       <div class="tarjeta ${filtroRapido === 'resueltos' ? 'activa' : ''}" data-filtro="resueltos"><div class="numero">${resueltos}</div><div class="etiqueta">Resueltos</div></div>
       <div class="tarjeta ${filtroRapido === 'pendientes' ? 'activa' : ''}" data-filtro="pendientes"><div class="numero">${pendientes}</div><div class="etiqueta">Pendientes</div></div>
       <div class="tarjeta ${filtroRapido === 'sinAsignar' ? 'activa' : ''}" data-filtro="sinAsignar"><div class="numero">${sinAsignar}</div><div class="etiqueta">Sin asignar</div></div>
-      <div class="tarjeta tarjeta-alerta ${filtroRapido === 'atrasados' ? 'activa' : ''}" data-filtro="atrasados"><div class="numero">${atrasados}</div><div class="etiqueta">⚠️ Atrasados (+${UMBRAL_HORAS_ATRASO}h)</div></div>
+      <div class="tarjeta tarjeta-alerta ${filtroRapido === 'atrasados' ? 'activa' : ''}" data-filtro="atrasados"><div class="numero">${atrasados}</div><div class="etiqueta">⚠️ Atrasados (según SLA)</div></div>
     `;
   }
 
@@ -707,8 +718,11 @@
       const imagenHtml = t.imagenAdjunta
         ? `<div style="margin-top:6px;"><a href="#" data-accion="ver-imagen" data-numero="${escaparHTML(t.numero)}" style="font-size:12px;">📎 Ver captura</a></div>`
         : '';
+      const tipoServicio = t.tipoServicio || 'Incidente';
+      const slaHoras = obtenerSlaHoras(t);
+      const textoSla = slaHoras >= 1 ? `${slaHoras}h` : `${Math.round(slaHoras * 60)}min`;
       const badgeAtrasoDetalle = atrasado
-        ? `<div class="badge-atraso" style="margin-bottom:6px;">⚠️ ${Math.floor(horasDesde(t.fechaCreacion))}h sin resolver</div>`
+        ? `<div class="badge-atraso" style="margin-bottom:6px;">⚠️ ${Math.floor(horasDesde(t.fechaCreacion))}h transcurridas (límite oficial: ${textoSla})</div>`
         : '';
 
       let botonesAccion = '';
@@ -734,7 +748,7 @@
         <tr class="fila-detalle" data-fila-detalle="${escaparHTML(t.numero)}" style="display:none;">
           <td colspan="6">
             ${badgeAtrasoDetalle}
-            <div style="margin-bottom:4px;"><strong>Categoría:</strong> ${escaparHTML(t.categoria)} &nbsp;·&nbsp; <strong>Prioridad:</strong> ${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</div>
+            <div style="margin-bottom:4px;"><strong>Tipo de servicio:</strong> ${escaparHTML(tipoServicio)} (tiempo oficial de atención: ${textoSla}) &nbsp;·&nbsp; <strong>Categoría:</strong> ${escaparHTML(t.categoria)} &nbsp;·&nbsp; <strong>Prioridad:</strong> ${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</div>
             <div style="margin-bottom:4px;"><strong>Área / Cargo / Ext:</strong> ${escaparHTML(t.area || 'N/A')} · ${escaparHTML(t.cargo || 'N/A')} · ${escaparHTML(t.extension || 'N/A')}</div>
             <div style="margin-bottom:4px;"><strong>Incidencia completa:</strong> ${escaparHTML(t.descripcion)}${imagenHtml}</div>
             <div class="acciones-fila" style="flex-direction:row; margin-top:8px;">${botonesAccion}</div>
@@ -851,9 +865,9 @@
     const tickets = obtenerTicketsFiltrados();
     if (tickets.length === 0) { alert('No hay tickets para exportar con el filtro actual.'); return; }
 
-    const encabezados = ['Ticket', 'Categoría', 'Prioridad', 'Estado', 'Creado por', 'Área', 'Cargo', 'Extensión', 'Incidencia', 'Técnico asignado', 'Solución', 'Fecha creación'];
+    const encabezados = ['Ticket', 'Tipo de servicio', 'Categoría', 'Prioridad', 'Estado', 'Creado por', 'Área', 'Cargo', 'Extensión', 'Incidencia', 'Técnico asignado', 'Solución', 'Fecha creación'];
     const filas = tickets.map((t) => [
-      t.numero, t.categoria, t.prioridad || 'Media', t.estado, t.nombre, t.area || '', t.cargo || '', t.extension || '',
+      t.numero, t.tipoServicio || 'Incidente', t.categoria, t.prioridad || 'Media', t.estado, t.nombre, t.area || '', t.cargo || '', t.extension || '',
       t.descripcion, t.tecnicoAsignado || 'Sin asignar', t.solucion || '',
       t.fechaCreacion ? new Date(t.fechaCreacion).toLocaleString('es-CO') : ''
     ]);

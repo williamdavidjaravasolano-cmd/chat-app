@@ -115,6 +115,7 @@ const ticketSchema = new mongoose.Schema({
   categoria: String,
   descripcion: String,
   prioridad: { type: String, default: 'Media' }, // Baja, Media, Alta, Urgente
+  tipoServicio: { type: String, default: 'Incidente' }, // Incidente o Requerimiento (define el tiempo de atencion oficial)
   imagenAdjunta: { type: String, default: null }, // captura de pantalla en base64 (opcional)
   nombre: String, // quien creo el ticket
   area: { type: String, default: '' },
@@ -1113,11 +1114,12 @@ io.on('connection', (socket) => {
   // El usuario crea un ticket nuevo (categoria + descripcion del problema)
   // Si "escalar" es true, el usuario pidio hablar directo con un tecnico,
   // sin que el bot intente responder automaticamente con el FAQ.
-  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion, escalar, prioridad, imagenAdjunta }) => {
+  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion, escalar, prioridad, imagenAdjunta, tipoServicio }) => {
     try {
       const numero = await generarNumeroTicket();
       const historial = [{ estado: 'Creado' }];
       const prioridadFinal = ['Baja', 'Media', 'Alta', 'Urgente'].includes(prioridad) ? prioridad : 'Media';
+      const tipoServicioFinal = ['Incidente', 'Requerimiento'].includes(tipoServicio) ? tipoServicio : 'Incidente';
 
       // Si la descripcion coincide con una pregunta frecuente, damos una respuesta rapida
       // (a menos que el usuario haya pedido escalar directo a un tecnico)
@@ -1138,6 +1140,7 @@ io.on('connection', (socket) => {
         categoria,
         descripcion,
         prioridad: prioridadFinal,
+        tipoServicio: tipoServicioFinal,
         imagenAdjunta: imagenAdjunta || null,
         nombre,
         area: areaActual,
@@ -1153,7 +1156,7 @@ io.on('connection', (socket) => {
 
       // Anunciamos el ticket en el chat de la sala, con los datos completos
       const iconosPrioridad = { Baja: '🟢', Media: '🟡', Alta: '🟠', Urgente: '🔴' };
-      const etiquetaPrioridad = `${iconosPrioridad[prioridadFinal] || '🟡'} Prioridad: ${prioridadFinal}`;
+      const etiquetaPrioridad = `${iconosPrioridad[prioridadFinal] || '🟡'} Prioridad: ${prioridadFinal} · Tipo: ${tipoServicioFinal}`;
       const datosTicket = formatoDatosTicket({ area: areaActual, nombre, cargo: cargoActual, extension: extActual, incidencia: descripcion });
       const textoAnuncio = escalar
         ? `🙋 ${nombre} solicitó hablar con un técnico. Ticket #${numero} (${categoria}), en espera de atención.\n${etiquetaPrioridad}\n\n${datosTicket}`
