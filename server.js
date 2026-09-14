@@ -92,6 +92,8 @@ const ticketSchema = new mongoose.Schema({
   solucion: { type: String, default: null },
   tecnicoAsignado: { type: String, default: null }, // quien tomo el caso con /tomar
   aprobadoParaConocimiento: { type: Boolean, default: false },
+  calificacion: { type: Number, default: null }, // 1 a 5, la pone el usuario cuando el ticket queda Resuelto
+  comentarioCalificacion: { type: String, default: null },
   historial: [{ estado: String, fecha: { type: Date, default: Date.now } }],
   fechaCreacion: { type: Date, default: Date.now }
 });
@@ -1027,6 +1029,27 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ---------- Calificacion de satisfaccion (solo tickets Resueltos, solo quien lo creo) ----------
+  socket.on('calificar-ticket', async ({ numero, nombre, calificacion, comentario }) => {
+    try {
+      const calificacionNum = Number(calificacion);
+      if (!Number.isInteger(calificacionNum) || calificacionNum < 1 || calificacionNum > 5) return;
+
+      const ticket = await Ticket.findOne({ numero });
+      if (!ticket) return;
+      if (ticket.estado !== 'Resuelto') return;
+      if (normalizarTexto(ticket.nombre) !== normalizarTexto(nombre || '')) return;
+
+      ticket.calificacion = calificacionNum;
+      ticket.comentarioCalificacion = (comentario || '').trim() || null;
+      await ticket.save();
+
+      socket.emit('ticket-calificado', { numero, calificacion: calificacionNum });
+    } catch (err) {
+      console.error('Error guardando la calificación del ticket:', err.message);
+    }
+  });
+
   // ---------- Conversacion privada por ticket ----------
   // Solo puede entrar quien creo el ticket, o un tecnico autorizado (para poder atenderlo).
   async function puedeVerConversacionTicket(numero, nombre) {
@@ -1307,6 +1330,24 @@ io.on('connection', (socket) => {
       });
       const tiempoPromedioHoras = contadorConTiempo > 0 ? (sumaHoras / contadorConTiempo) : null;
 
+      // Satisfaccion: solo se cuentan los tickets que el usuario ya califico
+      const calificados = resueltos.filter((t) => t.calificacion != null);
+      const promedioSatisfaccion = calificados.length > 0
+        ? calificados.reduce((suma, t) => suma + t.calificacion, 0) / calificados.length
+        : null;
+
+      const sumaPorTecnico = {};
+      const conteoPorTecnico = {};
+      calificados.forEach((t) => {
+        const tecnico = t.tecnicoAsignado || 'Sin asignar';
+        sumaPorTecnico[tecnico] = (sumaPorTecnico[tecnico] || 0) + t.calificacion;
+        conteoPorTecnico[tecnico] = (conteoPorTecnico[tecnico] || 0) + 1;
+      });
+      const satisfaccionPorTecnico = {};
+      Object.keys(sumaPorTecnico).forEach((tecnico) => {
+        satisfaccionPorTecnico[tecnico] = Math.round((sumaPorTecnico[tecnico] / conteoPorTecnico[tecnico]) * 10) / 10;
+      });
+
       socket.emit('metricas', {
         totalTickets,
         totalResueltos,
@@ -1314,7 +1355,10 @@ io.on('connection', (socket) => {
         porEstado,
         porCategoria,
         porTecnico,
-        tiempoPromedioHoras
+        tiempoPromedioHoras,
+        promedioSatisfaccion,
+        totalCalificados: calificados.length,
+        satisfaccionPorTecnico
       });
     } catch (err) {
       console.error('Error calculando metricas:', err.message);

@@ -1132,6 +1132,62 @@
     return `<div class="descripcion-ticket"><img src="${ticket.imagenAdjunta}" alt="Captura adjunta" style="max-width:100%; max-height:150px; border-radius:6px; margin-top:4px; cursor:pointer;" onclick="window.open(this.src, '_blank')"></div>`;
   }
 
+  function construirWidgetCalificacion(ticket) {
+    const contenedor = document.createElement('div');
+    contenedor.style.cssText = 'margin-top:8px; padding-top:8px; border-top:1px dashed #ccc;';
+
+    if (ticket.calificacion) {
+      contenedor.innerHTML = `<div style="font-size:13px; color:#555;">Tu calificación: ${'⭐'.repeat(ticket.calificacion)}${'☆'.repeat(5 - ticket.calificacion)}</div>`;
+      return contenedor;
+    }
+
+    const etiqueta = document.createElement('div');
+    etiqueta.textContent = '¿Qué tan satisfecho quedaste con la solución?';
+    etiqueta.style.cssText = 'font-size:13px; color:#555; margin-bottom:4px;';
+    contenedor.appendChild(etiqueta);
+
+    let seleccionActual = 0;
+    const filaEstrellas = document.createElement('div');
+    filaEstrellas.style.cssText = 'font-size:22px; cursor:pointer;';
+    const estrellas = [];
+    for (let i = 1; i <= 5; i++) {
+      const estrella = document.createElement('span');
+      estrella.textContent = '☆';
+      estrella.style.marginRight = '2px';
+      estrella.addEventListener('click', () => {
+        seleccionActual = i;
+        estrellas.forEach((el, idx) => { el.textContent = (idx < seleccionActual) ? '⭐' : '☆'; });
+      });
+      estrellas.push(estrella);
+      filaEstrellas.appendChild(estrella);
+    }
+    contenedor.appendChild(filaEstrellas);
+
+    const comentario = document.createElement('input');
+    comentario.type = 'text';
+    comentario.placeholder = 'Comentario (opcional)';
+    comentario.style.cssText = 'width:100%; padding:6px; margin-top:6px; border-radius:6px; border:1px solid #ccc; font-size:12px;';
+    contenedor.appendChild(comentario);
+
+    const botonEnviarCalificacion = document.createElement('button');
+    botonEnviarCalificacion.type = 'button';
+    botonEnviarCalificacion.textContent = 'Enviar calificación';
+    botonEnviarCalificacion.style.cssText = 'width:100%; margin-top:6px; padding:6px; background:#0B4F6C; color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;';
+    botonEnviarCalificacion.addEventListener('click', () => {
+      if (seleccionActual === 0) { alert('Elige de 1 a 5 estrellas primero.'); return; }
+      socket.emit('calificar-ticket', {
+        numero: ticket.numero,
+        nombre: miNombre,
+        calificacion: seleccionActual,
+        comentario: comentario.value.trim()
+      });
+      contenedor.innerHTML = `<div style="font-size:13px; color:#555;">¡Gracias por tu calificación! ${'⭐'.repeat(seleccionActual)}</div>`;
+    });
+    contenedor.appendChild(botonEnviarCalificacion);
+
+    return contenedor;
+  }
+
   function construirPanelTickets(tickets, filtro) {
     ticketsPanel.innerHTML = '';
 
@@ -1196,6 +1252,11 @@
       botonConversacion.textContent = '💬 Conversación privada con soporte';
       botonConversacion.addEventListener('click', () => abrirConversacionTicket(ticket.numero));
       item.appendChild(botonConversacion);
+
+      if (ticket.estado === 'Resuelto') {
+        item.appendChild(construirWidgetCalificacion(ticket));
+      }
+
       ticketsPanel.appendChild(item);
     });
 
@@ -1468,6 +1529,12 @@
     filas.push([]);
     filas.push(['Casos resueltos por técnico']);
     Object.entries(metricas.porTecnico).forEach(([k, v]) => filas.push([k, v]));
+    if (metricas.promedioSatisfaccion !== null) {
+      filas.push([]);
+      filas.push(['Satisfacción promedio general', metricas.promedioSatisfaccion.toFixed(1), `(${metricas.totalCalificados} calificaciones)`]);
+      filas.push(['Satisfacción promedio por técnico']);
+      Object.entries(metricas.satisfaccionPorTecnico || {}).forEach(([k, v]) => filas.push([k, v]));
+    }
 
     const contenidoCSV = filas.map((fila) => fila.map(celda).join(',')).join('\r\n');
     const blob = new Blob(['\uFEFF' + contenidoCSV], { type: 'text/csv;charset=utf-8;' });
@@ -1644,6 +1711,25 @@
       seccionTecnico.innerHTML = '<h4>🧑‍💻 Casos resueltos por técnico</h4>';
       construirBarras(seccionTecnico, metricas.porTecnico);
       panelReportes.appendChild(seccionTecnico);
+    }
+
+    // Satisfaccion
+    if (metricas.promedioSatisfaccion !== null) {
+      const seccionSatisfaccion = document.createElement('div');
+      seccionSatisfaccion.classList.add('seccion-reporte');
+      const promedioRedondeado = Math.round(metricas.promedioSatisfaccion * 10) / 10;
+      const estrellasLlenas = Math.round(metricas.promedioSatisfaccion);
+      let filasTecnico = '';
+      Object.entries(metricas.satisfaccionPorTecnico || {}).sort((a, b) => b[1] - a[1]).forEach(([tecnico, promedio]) => {
+        filasTecnico += `<div style="display:flex; justify-content:space-between; font-size:13px; padding:3px 0;"><span>${escaparHTML(tecnico)}</span><span>${'⭐'.repeat(Math.round(promedio))} (${promedio})</span></div>`;
+      });
+      seccionSatisfaccion.innerHTML = `
+        <h4>⭐ Satisfacción de los usuarios</h4>
+        <div style="font-size:18px; font-weight:bold; color:#0B4F6C;">${'⭐'.repeat(estrellasLlenas)}${'☆'.repeat(5 - estrellasLlenas)} (${promedioRedondeado}/5)</div>
+        <div style="font-size:12px; color:#888; margin-bottom:6px;">Basado en ${metricas.totalCalificados} calificación(es)</div>
+        ${filasTecnico}
+      `;
+      panelReportes.appendChild(seccionSatisfaccion);
     }
 
     agregarBotonVolver(panelReportes);
