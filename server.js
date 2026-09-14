@@ -400,6 +400,16 @@ const conocimientoSchema = new mongoose.Schema({
 });
 const Conocimiento = mongoose.model('Conocimiento', conocimientoSchema);
 
+// ---------- Buzon de sugerencias y calificacion hacia un tecnico ----------
+const sugerenciaSchema = new mongoose.Schema({
+  nombre: { type: String, required: true }, // quien envia la sugerencia (no es anonimo)
+  tecnicoCalificado: { type: String, default: null }, // opcional: a que tecnico califica
+  calificacion: { type: Number, default: null }, // 1 a 5, opcional
+  mensaje: { type: String, required: true },
+  fecha: { type: Date, default: Date.now }
+});
+const Sugerencia = mongoose.model('Sugerencia', sugerenciaSchema);
+
 // ---------- Preguntas frecuentes por sala ----------
 // Puedes agregar mas preguntas aqui. El "pregunta" debe escribirse EXACTAMENTE
 // igual en el archivo public/index.html (objeto preguntasPorSala), porque es lo
@@ -1209,6 +1219,50 @@ io.on('connection', (socket) => {
   });
 
   // El usuario pide ver la lista de sus propios tickets
+  // ---------- Buzon de sugerencias (cualquier usuario puede enviar) ----------
+  socket.on('enviar-sugerencia', async ({ nombre, tecnicoCalificado, calificacion, mensaje }) => {
+    try {
+      if (!nombre || !mensaje || !mensaje.trim()) return;
+
+      let calificacionFinal = null;
+      const numCalificacion = Number(calificacion);
+      if (Number.isInteger(numCalificacion) && numCalificacion >= 1 && numCalificacion <= 5) {
+        calificacionFinal = numCalificacion;
+      }
+
+      let tecnicoFinal = null;
+      if (tecnicoCalificado && TECNICOS_AUTORIZADOS.some((t) => normalizarTexto(t) === normalizarTexto(tecnicoCalificado))) {
+        tecnicoFinal = TECNICOS_AUTORIZADOS.find((t) => normalizarTexto(t) === normalizarTexto(tecnicoCalificado));
+      }
+
+      await new Sugerencia({
+        nombre,
+        tecnicoCalificado: tecnicoFinal,
+        calificacion: calificacionFinal,
+        mensaje: mensaje.trim()
+      }).save();
+
+      socket.emit('sugerencia-enviada');
+    } catch (err) {
+      console.error('Error guardando la sugerencia:', err.message);
+    }
+  });
+
+  // Solo Hector y William David pueden ver el buzon de sugerencias (igual que Reportes)
+  socket.on('obtener-sugerencias', async () => {
+    if (!puedeVerReportes(nombreActual)) {
+      socket.emit('lista-sugerencias', null);
+      return;
+    }
+    try {
+      const sugerencias = await Sugerencia.find({}).sort({ fecha: -1 }).limit(100);
+      socket.emit('lista-sugerencias', sugerencias);
+    } catch (err) {
+      console.error('Error obteniendo sugerencias:', err.message);
+      socket.emit('lista-sugerencias', []);
+    }
+  });
+
   socket.on('obtener-tickets', async ({ nombre }) => {
     try {
       const tickets = await Ticket.find({ nombre }).sort({ fechaCreacion: -1 });

@@ -222,7 +222,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -544,6 +544,8 @@
   body.modo-oscuro #panel-ia,
   body.modo-oscuro #panel-reportes,
   body.modo-oscuro #panel-conversacion-ticket,
+  body.modo-oscuro #panel-enviar-sugerencia,
+  body.modo-oscuro #panel-ver-sugerencias,
   body.modo-oscuro #opciones-panel {
     background: #1e1e1e;
     color: #e6e6e6;
@@ -625,6 +627,8 @@
   <div id="panel-ia"></div>
   <div id="panel-reportes"></div>
   <div id="panel-conversacion-ticket"></div>
+  <div id="panel-enviar-sugerencia"></div>
+  <div id="panel-ver-sugerencias"></div>
   <div id="opciones-panel"></div>
 
   <form id="form-mensaje">
@@ -672,6 +676,8 @@
   const panelIA = document.getElementById('panel-ia');
   const panelReportes = document.getElementById('panel-reportes');
   const panelConversacionTicket = document.getElementById('panel-conversacion-ticket');
+  const panelEnviarSugerencia = document.getElementById('panel-enviar-sugerencia');
+  const panelVerSugerencias = document.getElementById('panel-ver-sugerencias');
 
   // Debe coincidir con la lista TECNICOS_AUTORIZADOS de server.js
   const EQUIPO_TECNICO = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Julian', 'Yin Carlos', 'William David', 'Henrry', 'Hector', 'Kevin Daniel'];
@@ -873,7 +879,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -926,6 +932,7 @@
     if (esSoporteTecnico) {
       opciones.push({ icono: '🎫', texto: 'Crear ticket', accion: () => abrirPanel(ticketPanel, () => construirPanelTicket(false)) });
       opciones.push({ icono: '📋', texto: 'Mis tickets', accion: () => abrirPanel(ticketsPanel, () => socket.emit('obtener-tickets', { nombre: miNombre })) });
+      opciones.push({ icono: '💡', texto: 'Buzón de sugerencias', accion: () => abrirPanel(panelEnviarSugerencia, construirFormularioSugerencia) });
     }
 
     if (esSoporteTecnico && esTecnicoActual()) {
@@ -935,6 +942,7 @@
 
     if (esSoporteTecnico && puedeVerReportes()) {
       opciones.push({ icono: '📊', texto: 'Reportes', accion: () => abrirPanel(panelReportes, () => socket.emit('obtener-metricas', { nombre: miNombre })) });
+      opciones.push({ icono: '📬', texto: 'Sugerencias recibidas', accion: () => abrirPanel(panelVerSugerencias, () => socket.emit('obtener-sugerencias')) });
     }
 
     if (preguntas) {
@@ -1850,6 +1858,137 @@
   // Aviso discreto para tecnicos cuando hay actividad en un ticket que no tienen abierto
   socket.on('aviso-conversacion-ticket', (aviso) => {
     if (esTecnicoActual()) pintarMensaje(aviso);
+  });
+
+  // ---------- Buzon de sugerencias ----------
+  function construirFormularioSugerencia() {
+    panelEnviarSugerencia.innerHTML = '';
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = '💡 Buzón de sugerencias';
+    panelEnviarSugerencia.appendChild(titulo);
+
+    const etiquetaTecnico = document.createElement('div');
+    etiquetaTecnico.textContent = '¿Sobre qué técnico es? (opcional)';
+    etiquetaTecnico.style.cssText = 'font-size:13px; color:#555; margin-top:6px;';
+    panelEnviarSugerencia.appendChild(etiquetaTecnico);
+
+    const selectTecnico = document.createElement('select');
+    selectTecnico.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin:6px 0;';
+    const opcionGeneral = document.createElement('option');
+    opcionGeneral.value = '';
+    opcionGeneral.textContent = 'General (sin técnico específico)';
+    selectTecnico.appendChild(opcionGeneral);
+    EQUIPO_TECNICO.forEach((tecnico) => {
+      const opcion = document.createElement('option');
+      opcion.value = tecnico;
+      opcion.textContent = tecnico;
+      selectTecnico.appendChild(opcion);
+    });
+    panelEnviarSugerencia.appendChild(selectTecnico);
+
+    const etiquetaCalificacion = document.createElement('div');
+    etiquetaCalificacion.textContent = 'Calificación (opcional)';
+    etiquetaCalificacion.style.cssText = 'font-size:13px; color:#555; margin-top:6px;';
+    panelEnviarSugerencia.appendChild(etiquetaCalificacion);
+
+    let calificacionElegida = 0;
+    const filaEstrellas = document.createElement('div');
+    filaEstrellas.style.cssText = 'font-size:22px; cursor:pointer; margin:4px 0;';
+    const estrellas = [];
+    for (let i = 1; i <= 5; i++) {
+      const estrella = document.createElement('span');
+      estrella.textContent = '☆';
+      estrella.style.marginRight = '2px';
+      estrella.addEventListener('click', () => {
+        calificacionElegida = (calificacionElegida === i) ? 0 : i; // click de nuevo en la misma quita la calificacion
+        estrellas.forEach((el, idx) => { el.textContent = (idx < calificacionElegida) ? '⭐' : '☆'; });
+      });
+      estrellas.push(estrella);
+      filaEstrellas.appendChild(estrella);
+    }
+    panelEnviarSugerencia.appendChild(filaEstrellas);
+
+    const etiquetaMensaje = document.createElement('div');
+    etiquetaMensaje.textContent = 'Tu sugerencia o comentario';
+    etiquetaMensaje.style.cssText = 'font-size:13px; color:#555; margin-top:6px;';
+    panelEnviarSugerencia.appendChild(etiquetaMensaje);
+
+    const textareaMensaje = document.createElement('textarea');
+    textareaMensaje.rows = 3;
+    textareaMensaje.placeholder = 'Escribe aquí lo que quieras contarnos...';
+    panelEnviarSugerencia.appendChild(textareaMensaje);
+
+    const botonEnviar = document.createElement('button');
+    botonEnviar.type = 'button';
+    botonEnviar.textContent = 'Enviar sugerencia';
+    botonEnviar.classList.add('boton-enviar-ticket');
+    botonEnviar.addEventListener('click', () => {
+      const mensaje = textareaMensaje.value.trim();
+      if (!mensaje) { alert('Escribe tu sugerencia antes de enviarla.'); return; }
+      socket.emit('enviar-sugerencia', {
+        nombre: miNombre,
+        tecnicoCalificado: selectTecnico.value || null,
+        calificacion: calificacionElegida || null,
+        mensaje
+      });
+    });
+    panelEnviarSugerencia.appendChild(botonEnviar);
+
+    agregarBotonVolver(panelEnviarSugerencia);
+  }
+
+  socket.on('sugerencia-enviada', () => {
+    panelEnviarSugerencia.innerHTML = '<div class="faq-titulo">¡Gracias! Tu sugerencia fue enviada. 💡</div>';
+    agregarBotonVolver(panelEnviarSugerencia);
+  });
+
+  // Vista para Hector y William David: lista de sugerencias recibidas
+  function construirPanelVerSugerencias(sugerencias) {
+    panelVerSugerencias.innerHTML = '';
+
+    if (sugerencias === null) {
+      panelVerSugerencias.innerHTML = '<div class="faq-titulo">No tienes autorización para ver esta sección.</div>';
+      agregarBotonVolver(panelVerSugerencias);
+      return;
+    }
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = `📬 Sugerencias recibidas (${sugerencias.length})`;
+    panelVerSugerencias.appendChild(titulo);
+
+    if (sugerencias.length === 0) {
+      const vacio = document.createElement('div');
+      vacio.classList.add('faq-titulo');
+      vacio.textContent = 'Todavía no hay sugerencias.';
+      panelVerSugerencias.appendChild(vacio);
+    }
+
+    sugerencias.forEach((s) => {
+      const item = document.createElement('div');
+      item.classList.add('item-ticket');
+      const estrellasHtml = s.calificacion ? '⭐'.repeat(s.calificacion) + '☆'.repeat(5 - s.calificacion) : '';
+      const tecnicoHtml = s.tecnicoCalificado ? `<strong>Sobre:</strong> ${escaparHTML(s.tecnicoCalificado)}` : '<em>General</em>';
+      const fecha = s.fecha ? new Date(s.fecha).toLocaleString('es-CO') : '';
+      item.innerHTML = `
+        <div class="fila-superior">
+          <strong>${escaparHTML(s.nombre)}</strong>
+          ${estrellasHtml ? `<span>${estrellasHtml}</span>` : ''}
+        </div>
+        <div class="descripcion-ticket">${tecnicoHtml}</div>
+        <div class="descripcion-ticket">${escaparHTML(s.mensaje)}</div>
+        <div class="descripcion-ticket" style="color:#999; font-size:11px;">${fecha}</div>
+      `;
+      panelVerSugerencias.appendChild(item);
+    });
+
+    agregarBotonVolver(panelVerSugerencias);
+  }
+
+  socket.on('lista-sugerencias', (sugerencias) => {
+    construirPanelVerSugerencias(sugerencias);
   });
 
   function construirPanelReportes(metricas) {
