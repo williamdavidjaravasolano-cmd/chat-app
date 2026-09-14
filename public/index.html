@@ -1624,7 +1624,14 @@
     }
   });
 
-  socket.on('mensaje-ticket', pintarMensajeTicket);
+  socket.on('mensaje-ticket', (data) => {
+    pintarMensajeTicket(data);
+    if (data.nombre !== miNombre) {
+      const textoPlano = data.tipo === 'imagen' ? '📷 Imagen' : data.texto;
+      const numeroTicket = data.numeroTicket || data.numero || '';
+      notificarSiEstaEnSegundoPlano(`${data.nombre} — Ticket #${numeroTicket}`, textoPlano.slice(0, 120));
+    }
+  });
 
   // Aviso discreto para tecnicos cuando hay actividad en un ticket que no tienen abierto
   socket.on('aviso-conversacion-ticket', (aviso) => {
