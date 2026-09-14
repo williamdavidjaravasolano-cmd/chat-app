@@ -1,0 +1,14 @@
+{
+  "name": "Chat Soporte Tecnico",
+  "short_name": "Soporte",
+  "description": "Chat de soporte tecnico del Hospital HGM",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#0B4F6C",
+  "theme_color": "#0B4F6C",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/iconos/icon-chat-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/iconos/icon-chat-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

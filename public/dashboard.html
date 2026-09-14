@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Panel de Tickets HGM</title>
+<title>Panel de Tickets</title>
+<link rel="manifest" href="/manifest-dashboard.json">
+<meta name="theme-color" content="#0B4F6C">
+<link rel="apple-touch-icon" href="/iconos/icon-dashboard-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tickets">
 <style>
   * { box-sizing: border-box; }
   body {
@@ -233,7 +239,7 @@
 
 <div id="pantalla-clave">
   <div id="caja-clave">
-    <h2>🔒 Panel de Tickets HGM</h2>
+    <h2>🔒 Panel de Tickets</h2>
     <input type="text" id="input-usuario" placeholder="Tu nombre (ej: Juan Diego)">
     <input type="password" id="input-clave" placeholder="Contraseña">
     <button id="btn-entrar-clave">Entrar</button>
@@ -243,7 +249,7 @@
 
 <div id="dashboard">
   <header>
-    <h1>📋 Panel de Tickets HGM</h1>
+    <h1>📋 Panel de Tickets</h1>
     <div class="info-derecha">
       <span id="usuario-conectado"></span>
       <span class="actualizado" id="ultima-actualizacion">Cargando...</span>
@@ -296,6 +302,11 @@
 
 <script>
   const UMBRAL_HORAS_ATRASO = 2; // tickets sin resolver con mas de este tiempo se marcan como atrasados
+
+  // Permite instalar el dashboard como app en el celular (PWA)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
 
   let usuarioActual = sessionStorage.getItem('dashboardUsuario') || '';
   let claveActual = sessionStorage.getItem('dashboardClave') || '';

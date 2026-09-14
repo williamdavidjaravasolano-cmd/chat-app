@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chat Soporte Tecnico HGM</title>
+<title>Chat Soporte Tecnico</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0B4F6C">
+<link rel="apple-touch-icon" href="/iconos/icon-chat-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Soporte">
 <style>
   * { box-sizing: border-box; }
   body {
@@ -594,7 +600,7 @@
       <button id="btn-menu" title="Volver al menu">🏠 Menú</button>
       <button id="btn-modo-oscuro" title="Modo oscuro">🌙</button>
     </div>
-    <span>Chat Soporte Tecnico HGM</span>
+    <span>Chat Soporte Tecnico</span>
     <span class="sala-nombre" id="sala-actual-label"></span>
   </div>
   <div id="mensajes"></div>
@@ -681,6 +687,11 @@
   const inputImagen = document.getElementById('input-imagen');
 
   const SALA_UNICA = 'Soporte Tecnico';
+
+  // Permite instalar el chat como app en el celular (PWA)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
 
   function esNombreDeTecnico(nombre) {
     const normalizado = nombre.trim().toLowerCase();
