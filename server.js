@@ -16,28 +16,31 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // ---------- API del Dashboard de tickets (herramienta separada del chat) ----------
-// Cada tecnico tiene su propio usuario y contraseña. Cambia las contraseñas aqui
-// cuando quieras (son las que cada tecnico usa para entrar al dashboard).
-const CREDENCIALES_DASHBOARD = {
-  'Juan Diego': 'Httxq740*',
-  'Juan Pablo': 'Qfuaw255+',
-  'Juan Jose': 'Cnbdf487!',
-  'Julian': 'Bvgbl004+',
-  'Yin Carlos': 'Glqtk846$',
-  'William David': 'Oomhf132+',
-  'Henrry': 'Cjhyc078*',
-  'Hector': 'Hyqmp601+',
-  'Kevin Daniel': 'Gcdzh252*'
-};
+// Las contraseñas de los tecnicos ahora viven en la base de datos (coleccion Tecnico),
+// no en el codigo, para que los cambios de contraseña sobrevivan a futuros despliegues.
+const CLAVE_GENERICA_INICIAL = 'CambioObligatorio2026';
 
-function verificarCredencialesDashboard(req, res, next) {
+const tecnicoSchema = new mongoose.Schema({
+  nombre: { type: String, required: true, unique: true },
+  clave: { type: String, required: true },
+  claveCambiada: { type: Boolean, default: false } // false = todavia usa la clave generica
+});
+const Tecnico = mongoose.model('Tecnico', tecnicoSchema);
+
+async function verificarCredencialesDashboard(req, res, next) {
   const usuario = req.headers['x-dashboard-usuario'];
   const clave = req.headers['x-dashboard-clave'];
-  if (!usuario || !CREDENCIALES_DASHBOARD[usuario] || CREDENCIALES_DASHBOARD[usuario] !== clave) {
-    return res.status(401).json({ error: 'Usuario o clave incorrectos' });
+  try {
+    const tecnico = usuario ? await Tecnico.findOne({ nombre: usuario }) : null;
+    if (!tecnico || tecnico.clave !== clave) {
+      return res.status(401).json({ error: 'Usuario o clave incorrectos' });
+    }
+    req.tecnicoDashboard = usuario;
+    next();
+  } catch (err) {
+    console.error('Error verificando credenciales del dashboard:', err.message);
+    res.status(500).json({ error: 'Error del servidor' });
   }
-  req.tecnicoDashboard = usuario;
-  next();
 }
 
 // ---------- Conexion a MongoDB Atlas ----------
@@ -114,15 +117,45 @@ const AccesoDashboard = mongoose.model('AccesoDashboard', accesoDashboardSchema)
 // El dashboard llama esto una vez, al iniciar sesion, para validar y dejar registro
 app.post('/api/dashboard-login', async (req, res) => {
   const { usuario, clave } = req.body || {};
-  if (!usuario || !CREDENCIALES_DASHBOARD[usuario] || CREDENCIALES_DASHBOARD[usuario] !== clave) {
-    return res.status(401).json({ error: 'Usuario o clave incorrectos' });
+  try {
+    const tecnico = usuario ? await Tecnico.findOne({ nombre: usuario }) : null;
+    if (!tecnico || tecnico.clave !== clave) {
+      return res.status(401).json({ error: 'Usuario o clave incorrectos' });
+    }
+    try {
+      await new AccesoDashboard({ tecnico: usuario }).save();
+    } catch (err) {
+      console.error('Error registrando acceso al dashboard:', err.message);
+    }
+    res.json({ ok: true, tecnico: usuario, debeCambiarClave: !tecnico.claveCambiada });
+  } catch (err) {
+    console.error('Error en /api/dashboard-login:', err.message);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// Permite a un tecnico cambiar su propia contraseña (desde el dashboard o desde el chat)
+app.post('/api/cambiar-clave-tecnico', async (req, res) => {
+  const { usuario, claveActual, claveNueva } = req.body || {};
+  if (!usuario || !claveActual || !claveNueva) {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
+  if (claveNueva.length < 6) {
+    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
   }
   try {
-    await new AccesoDashboard({ tecnico: usuario }).save();
+    const tecnico = await Tecnico.findOne({ nombre: usuario });
+    if (!tecnico || tecnico.clave !== claveActual) {
+      return res.status(401).json({ error: 'La contraseña actual no es correcta' });
+    }
+    tecnico.clave = claveNueva;
+    tecnico.claveCambiada = true;
+    await tecnico.save();
+    res.json({ ok: true });
   } catch (err) {
-    console.error('Error registrando acceso al dashboard:', err.message);
+    console.error('Error cambiando la clave del tecnico:', err.message);
+    res.status(500).json({ error: 'Error del servidor' });
   }
-  res.json({ ok: true, tecnico: usuario });
 });
 
 // Devuelve todos los tickets (para el dashboard). Admite filtros opcionales por
@@ -458,6 +491,20 @@ mongoose.connection.once('open', async () => {
   } catch (err) {
     console.error('Error cargando la base de conocimiento aprendida:', err.message);
   }
+
+  // Crea el registro de cada tecnico autorizado en la base de datos, con la clave
+  // generica, SOLO si todavia no existe (para no pisar contraseñas ya personalizadas).
+  try {
+    for (const nombreTecnico of TECNICOS_AUTORIZADOS) {
+      const existente = await Tecnico.findOne({ nombre: nombreTecnico });
+      if (!existente) {
+        await new Tecnico({ nombre: nombreTecnico, clave: CLAVE_GENERICA_INICIAL, claveCambiada: false }).save();
+        console.log(`Tecnico creado con clave genérica: ${nombreTecnico}`);
+      }
+    }
+  } catch (err) {
+    console.error('Error creando los registros iniciales de tecnicos:', err.message);
+  }
 });
 
 // ---------- Saludo automatico tipo mesa de ayuda (todas las salas) ----------
@@ -504,8 +551,19 @@ io.on('connection', (socket) => {
       (t) => normalizarTexto(t) === normalizarTexto(nombre || '')
     );
     if (tecnicoCoincidente) {
-      if (!clave || CREDENCIALES_DASHBOARD[tecnicoCoincidente] !== clave) {
-        socket.emit('error-login', 'Contraseña de técnico incorrecta.');
+      try {
+        const registroTecnico = await Tecnico.findOne({ nombre: tecnicoCoincidente });
+        if (!registroTecnico || !clave || registroTecnico.clave !== clave) {
+          socket.emit('error-login', 'Contraseña de técnico incorrecta.');
+          return;
+        }
+        if (!registroTecnico.claveCambiada) {
+          socket.emit('debe-cambiar-clave', { nombre: tecnicoCoincidente });
+          return;
+        }
+      } catch (err) {
+        console.error('Error verificando la clave del tecnico en el chat:', err.message);
+        socket.emit('error-login', 'Ocurrió un error verificando tu contraseña. Intenta de nuevo.');
         return;
       }
       nombre = tecnicoCoincidente; // usamos siempre la ortografia oficial del nombre

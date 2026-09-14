@@ -25,7 +25,7 @@
     align-items: center;
     height: 100vh;
   }
-  #caja-clave {
+  #caja-clave, #caja-cambio-clave {
     background: white;
     padding: 30px;
     border-radius: 10px;
@@ -33,15 +33,15 @@
     text-align: center;
     width: 300px;
   }
-  #caja-clave h2 { margin-top: 0; color: #0B4F6C; }
-  #caja-clave input {
+  #caja-clave h2, #caja-cambio-clave h2 { margin-top: 0; color: #0B4F6C; }
+  #caja-clave input, #caja-cambio-clave input {
     width: 100%;
     padding: 10px;
     margin: 8px 0;
     border: 1px solid #ccc;
     border-radius: 6px;
   }
-  #caja-clave button {
+  #caja-clave button, #caja-cambio-clave button {
     width: 100%;
     padding: 10px;
     background: #1E88E5;
@@ -52,7 +52,7 @@
     font-weight: bold;
     margin-top: 6px;
   }
-  #error-clave { color: #d32f2f; font-size: 13px; min-height: 18px; margin-top: 6px; }
+  #error-clave, #error-cambio-clave-dash { color: #d32f2f; font-size: 13px; min-height: 18px; margin-top: 6px; }
 
   #dashboard { display: none; }
 
@@ -245,6 +245,15 @@
     <button id="btn-entrar-clave">Entrar</button>
     <div id="error-clave"></div>
   </div>
+
+  <div id="caja-cambio-clave" style="display:none;">
+    <h2>🔒 Cambia tu contraseña</h2>
+    <p style="font-size:13px; color:#666; margin-top:-8px;">Es tu primer ingreso. Elige una contraseña personal para continuar.</p>
+    <input type="password" id="input-clave-nueva-dash" placeholder="Nueva contraseña (mínimo 6 caracteres)">
+    <input type="password" id="input-clave-nueva-dash-confirmar" placeholder="Confirmar nueva contraseña">
+    <button id="btn-guardar-clave-nueva-dash">Guardar y entrar</button>
+    <div id="error-cambio-clave-dash"></div>
+  </div>
 </div>
 
 <div id="dashboard">
@@ -354,9 +363,17 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario, clave })
       });
+      const datos = await respuesta.json();
 
       if (!respuesta.ok) {
-        errorClave.textContent = 'Usuario o contraseña incorrectos.';
+        errorClave.textContent = datos.error || 'Usuario o contraseña incorrectos.';
+        return;
+      }
+
+      if (datos.debeCambiarClave) {
+        tecnicoPendienteDeCambioDash = { nombre: usuario, claveActual: clave };
+        document.getElementById('caja-clave').style.display = 'none';
+        document.getElementById('caja-cambio-clave').style.display = 'block';
         return;
       }
 
@@ -373,6 +390,52 @@
   document.getElementById('btn-entrar-clave').addEventListener('click', iniciarSesion);
   inputClave.addEventListener('keypress', (e) => { if (e.key === 'Enter') iniciarSesion(); });
 
+  // ---------- Cambio obligatorio de contraseña (primer ingreso) ----------
+  let tecnicoPendienteDeCambioDash = null;
+  const errorCambioClaveDash = document.getElementById('error-cambio-clave-dash');
+
+  document.getElementById('btn-guardar-clave-nueva-dash').addEventListener('click', async () => {
+    const claveNueva = document.getElementById('input-clave-nueva-dash').value;
+    const claveConfirmar = document.getElementById('input-clave-nueva-dash-confirmar').value;
+
+    if (claveNueva.length < 6) {
+      errorCambioClaveDash.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+      return;
+    }
+    if (claveNueva !== claveConfirmar) {
+      errorCambioClaveDash.textContent = 'Las dos contraseñas no coinciden.';
+      return;
+    }
+
+    try {
+      const respuesta = await fetch('/api/cambiar-clave-tecnico', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuario: tecnicoPendienteDeCambioDash.nombre,
+          claveActual: tecnicoPendienteDeCambioDash.claveActual,
+          claveNueva
+        })
+      });
+      const datos = await respuesta.json();
+
+      if (!respuesta.ok) {
+        errorCambioClaveDash.textContent = datos.error || 'No se pudo cambiar la contraseña.';
+        return;
+      }
+
+      usuarioActual = tecnicoPendienteDeCambioDash.nombre;
+      claveActual = claveNueva;
+      sessionStorage.setItem('dashboardUsuario', usuarioActual);
+      sessionStorage.setItem('dashboardClave', claveActual);
+      document.getElementById('caja-cambio-clave').style.display = 'none';
+      tecnicoPendienteDeCambioDash = null;
+      cargarTodo();
+    } catch (err) {
+      errorCambioClaveDash.textContent = 'No se pudo conectar con el servidor.';
+    }
+  });
+
   document.getElementById('btn-salir').addEventListener('click', () => {
     sessionStorage.removeItem('dashboardUsuario');
     sessionStorage.removeItem('dashboardClave');
@@ -384,6 +447,8 @@
   function mostrarPantallaClave(mensajeError) {
     pantallaClave.style.display = 'flex';
     dashboard.style.display = 'none';
+    document.getElementById('caja-clave').style.display = 'block';
+    document.getElementById('caja-cambio-clave').style.display = 'none';
     errorClave.textContent = mensajeError || '';
   }
 

@@ -579,19 +579,30 @@
 <body>
 
 <div id="login-box">
-  <h2>Soporte Técnico</h2>
-  <input type="text" id="input-nombre" placeholder="Escribe tu nombre" maxlength="20">
+  <div id="login-normal">
+    <h2>Soporte Técnico</h2>
+    <input type="text" id="input-nombre" placeholder="Escribe tu nombre" maxlength="20">
 
-  <input type="password" id="input-clave-tecnico" placeholder="Contraseña de técnico" style="display:none;">
-  <div id="error-login-tecnico" style="display:none; color:#d32f2f; font-size:12px; margin:-6px 0 6px;"></div>
+    <input type="password" id="input-clave-tecnico" placeholder="Contraseña de técnico" style="display:none;">
+    <div id="error-login-tecnico" style="display:none; color:#d32f2f; font-size:12px; margin:-6px 0 6px;"></div>
 
-  <div id="campos-soporte">
-    <input type="text" id="input-area" placeholder="Área (ej: Laboratorio)">
-    <input type="text" id="input-cargo" placeholder="Cargo (ej: Enfermera jefe)">
-    <input type="text" id="input-ext" placeholder="Extensión (ej: 1234)">
+    <div id="campos-soporte">
+      <input type="text" id="input-area" placeholder="Área (ej: Laboratorio)">
+      <input type="text" id="input-cargo" placeholder="Cargo (ej: Enfermera jefe)">
+      <input type="text" id="input-ext" placeholder="Extensión (ej: 1234)">
+    </div>
+
+    <button id="btn-entrar">Entrar</button>
   </div>
 
-  <button id="btn-entrar">Entrar</button>
+  <div id="login-cambio-clave" style="display:none;">
+    <h2>Cambia tu contraseña</h2>
+    <p style="font-size:13px; color:#666; margin-top:-8px;">Es tu primer ingreso. Elige una contraseña personal para continuar.</p>
+    <input type="password" id="input-clave-nueva" placeholder="Nueva contraseña (mínimo 6 caracteres)">
+    <input type="password" id="input-clave-nueva-confirmar" placeholder="Confirmar nueva contraseña">
+    <div id="error-cambio-clave" style="display:none; color:#d32f2f; font-size:12px; margin:-6px 0 6px;"></div>
+    <button id="btn-guardar-clave-nueva">Guardar y entrar</button>
+  </div>
 </div>
 
 <div id="chat-container">
@@ -637,6 +648,12 @@
   const inputNombre = document.getElementById('input-nombre');
   const inputClaveTecnico = document.getElementById('input-clave-tecnico');
   const errorLoginTecnico = document.getElementById('error-login-tecnico');
+  const loginNormal = document.getElementById('login-normal');
+  const loginCambioClave = document.getElementById('login-cambio-clave');
+  const inputClaveNueva = document.getElementById('input-clave-nueva');
+  const inputClaveNuevaConfirmar = document.getElementById('input-clave-nueva-confirmar');
+  const errorCambioClave = document.getElementById('error-cambio-clave');
+  const btnGuardarClaveNueva = document.getElementById('btn-guardar-clave-nueva');
   const camposSoporte = document.getElementById('campos-soporte');
   const inputArea = document.getElementById('input-area');
   const inputCargo = document.getElementById('input-cargo');
@@ -712,6 +729,76 @@
     btnEntrar.textContent = 'Entrar';
     miNombre = '';
     miSala = '';
+  });
+
+  // ---------- Cambio obligatorio de contraseña (primer ingreso de un tecnico) ----------
+  let tecnicoPendienteDeCambio = null; // { nombre, claveActual }
+
+  socket.on('debe-cambiar-clave', ({ nombre }) => {
+    tecnicoPendienteDeCambio = { nombre, claveActual: inputClaveTecnico.value };
+    btnEntrar.disabled = false;
+    btnEntrar.textContent = 'Entrar';
+    loginNormal.style.display = 'none';
+    loginCambioClave.style.display = 'block';
+    inputClaveNueva.value = '';
+    inputClaveNuevaConfirmar.value = '';
+    errorCambioClave.style.display = 'none';
+  });
+
+  btnGuardarClaveNueva.addEventListener('click', async () => {
+    const claveNueva = inputClaveNueva.value;
+    const claveConfirmar = inputClaveNuevaConfirmar.value;
+
+    if (claveNueva.length < 6) {
+      errorCambioClave.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+      errorCambioClave.style.display = 'block';
+      return;
+    }
+    if (claveNueva !== claveConfirmar) {
+      errorCambioClave.textContent = 'Las dos contraseñas no coinciden.';
+      errorCambioClave.style.display = 'block';
+      return;
+    }
+
+    btnGuardarClaveNueva.disabled = true;
+    btnGuardarClaveNueva.textContent = 'Guardando...';
+
+    try {
+      const respuesta = await fetch('/api/cambiar-clave-tecnico', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuario: tecnicoPendienteDeCambio.nombre,
+          claveActual: tecnicoPendienteDeCambio.claveActual,
+          claveNueva
+        })
+      });
+      const datos = await respuesta.json();
+
+      if (!respuesta.ok) {
+        errorCambioClave.textContent = datos.error || 'No se pudo cambiar la contraseña.';
+        errorCambioClave.style.display = 'block';
+        btnGuardarClaveNueva.disabled = false;
+        btnGuardarClaveNueva.textContent = 'Guardar y entrar';
+        return;
+      }
+
+      // Contraseña actualizada: volvemos al login normal y entramos automaticamente con la clave nueva
+      loginCambioClave.style.display = 'none';
+      loginNormal.style.display = 'block';
+      inputNombre.value = tecnicoPendienteDeCambio.nombre;
+      inputClaveTecnico.value = claveNueva;
+      inputClaveTecnico.style.display = 'block';
+      btnGuardarClaveNueva.disabled = false;
+      btnGuardarClaveNueva.textContent = 'Guardar y entrar';
+      tecnicoPendienteDeCambio = null;
+      entrarAlChat();
+    } catch (err) {
+      errorCambioClave.textContent = 'No se pudo conectar con el servidor.';
+      errorCambioClave.style.display = 'block';
+      btnGuardarClaveNueva.disabled = false;
+      btnGuardarClaveNueva.textContent = 'Guardar y entrar';
+    }
   });
 
   function entrarAlChat() {
