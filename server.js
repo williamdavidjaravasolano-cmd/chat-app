@@ -514,6 +514,9 @@ mongoose.connection.once('open', async () => {
   revisarYLimpiarHistorial();
   setInterval(revisarYLimpiarHistorial, 30 * 60 * 1000);
 
+  // Revisa cada minuto si hay tickets sin tomar que ya cumplieron el tiempo de espera
+  setInterval(asignarTicketsAutomaticamente, 60 * 1000);
+
   try {
     const aprendidos = await Conocimiento.find({});
     aprendidos.forEach((item) => {
@@ -567,6 +570,63 @@ function normalizarTexto(texto) {
 
 // Usuarios conectados por sala: { nombreSala: { socketId: nombreUsuario } }
 const usuariosPorSala = {};
+
+// ---------- Asignacion automatica de tickets sin tomar ----------
+// Si un ticket lleva 5 minutos sin que ningun tecnico lo tome, y hay al menos
+// un tecnico autorizado conectado al chat en ese momento, se le asigna solo,
+// repartiendo la carga entre los tecnicos disponibles (el que tenga menos
+// casos "En proceso" en ese momento).
+const MINUTOS_ESPERA_ASIGNACION_AUTOMATICA = 5;
+
+async function asignarTicketsAutomaticamente() {
+  try {
+    const limiteFecha = new Date(Date.now() - MINUTOS_ESPERA_ASIGNACION_AUTOMATICA * 60 * 1000);
+    const ticketsSinTomar = await Ticket.find({
+      tecnicoAsignado: null,
+      estado: { $ne: 'Resuelto' },
+      fechaCreacion: { $lte: limiteFecha }
+    });
+    if (ticketsSinTomar.length === 0) return;
+
+    const conectados = Object.values(usuariosPorSala[SALA_SOPORTE] || {});
+    const tecnicosDisponibles = TECNICOS_AUTORIZADOS.filter((tecnico) =>
+      conectados.some((nombreConectado) => normalizarTexto(nombreConectado) === normalizarTexto(tecnico))
+    );
+    if (tecnicosDisponibles.length === 0) return;
+
+    const activosPorTecnico = {};
+    for (const tecnico of tecnicosDisponibles) {
+      activosPorTecnico[tecnico] = await Ticket.countDocuments({ tecnicoAsignado: tecnico, estado: 'En proceso' });
+    }
+
+    for (const ticket of ticketsSinTomar) {
+      const elegido = tecnicosDisponibles.reduce(
+        (min, tecnico) => (activosPorTecnico[tecnico] < activosPorTecnico[min] ? tecnico : min),
+        tecnicosDisponibles[0]
+      );
+
+      ticket.estado = 'En proceso';
+      ticket.tecnicoAsignado = elegido;
+      ticket.historial.push({ estado: 'En proceso' });
+      await ticket.save();
+      activosPorTecnico[elegido] += 1;
+
+      const salaDelTicket = ticket.sala || SALA_SOPORTE;
+      const mensajeAsignado = {
+        sala: salaDelTicket,
+        nombre: NOMBRE_BOT_SOPORTE,
+        texto: `🤖 Nadie tomó el ticket #${ticket.numero} en ${MINUTOS_ESPERA_ASIGNACION_AUTOMATICA} minutos, así que se asignó automáticamente a ${elegido} (estaba disponible en el chat). ${ticket.nombre}, ya hay un técnico al tanto de tu caso.`,
+        tipo: 'texto',
+        hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+      };
+      await new Mensaje(mensajeAsignado).save();
+      io.to(salaDelTicket).emit('mensaje', mensajeAsignado);
+      console.log(`Ticket #${ticket.numero} asignado automáticamente a ${elegido}.`);
+    }
+  } catch (err) {
+    console.error('Error asignando tickets automáticamente:', err.message);
+  }
+}
 
 io.on('connection', (socket) => {
   let salaActual = null;
