@@ -518,6 +518,25 @@ io.on('connection', (socket) => {
 
     io.to(sala).emit('lista-usuarios', Object.values(usuariosPorSala[sala]));
     socket.to(sala).emit('mensaje-sistema', `${nombre} se ha unido al chat`);
+
+    // Se une automaticamente a las conversaciones privadas de sus propios tickets,
+    // para recibir los mensajes del tecnico sin tener que abrir nada aparte.
+    try {
+      const misTickets = await Ticket.find({ nombre });
+      const conversacionesPrivadas = [];
+      for (const t of misTickets) {
+        socket.join(`ticket-${t.numero}`);
+        const mensajesTicket = await Mensaje.find({ sala: `ticket-${t.numero}` }).sort({ fecha: 1 });
+        if (mensajesTicket.length > 0) {
+          conversacionesPrivadas.push({ numero: t.numero, estado: t.estado, mensajes: mensajesTicket });
+        }
+      }
+      if (conversacionesPrivadas.length > 0) {
+        socket.emit('historial-conversaciones-privadas', conversacionesPrivadas);
+      }
+    } catch (err) {
+      console.error('Error uniendo a las salas de tickets del usuario:', err.message);
+    }
   });
 
   // Mensaje de texto o imagen
@@ -737,6 +756,7 @@ io.on('connection', (socket) => {
             ticket.tecnicoAsignado = data.nombre;
             ticket.historial.push({ estado: 'En proceso' });
             await ticket.save();
+            socket.join(`ticket-${numeroTicket}`);
 
             const mensajeTomado = {
               sala: data.sala,
@@ -962,6 +982,7 @@ io.on('connection', (socket) => {
         historial
       }).save();
 
+      socket.join(`ticket-${numero}`);
       socket.emit('ticket-creado', ticketGuardado);
 
       // Anunciamos el ticket en el chat de la sala, con los datos completos
@@ -1140,6 +1161,7 @@ io.on('connection', (socket) => {
       ticket.tecnicoAsignado = nombreActual;
       ticket.historial.push({ estado: 'En proceso' });
       await ticket.save();
+      socket.join(`ticket-${numero}`);
 
       const mensajeTomado = {
         sala: salaActual,

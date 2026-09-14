@@ -1608,6 +1608,60 @@
     contenedorMensajes.scrollTop = contenedorMensajes.scrollHeight;
   }
 
+  // Muestra el mensaje de la conversacion privada directo en el chat principal,
+  // para que el usuario no tenga que entrar a ningun panel aparte para verlo.
+  const ticketsYaMostradosEnPrincipal = new Set(); // evita mostrar el historial completo cada vez que se conecta
+  function pintarMensajeTicketEnPrincipal(data, esHistorial) {
+    const numero = data.numeroTicket || data.numero;
+    const claveUnica = data._id || `${numero}-${data.fecha}-${data.texto}`;
+    if (esHistorial && ticketsYaMostradosEnPrincipal.has(claveUnica)) return;
+    ticketsYaMostradosEnPrincipal.add(claveUnica);
+
+    const div = document.createElement('div');
+    div.classList.add('mensaje');
+    if (data.nombre === miNombre) div.classList.add('propio');
+
+    const contenidoHtml = data.tipo === 'imagen'
+      ? `<img class="imagen-chat" src="${data.texto}" alt="imagen enviada">`
+      : `<div class="texto">${escaparHTML(data.texto).replace(/\n/g, '<br>')}</div>`;
+
+    div.innerHTML = `
+      <div class="etiqueta-ia" style="background:#E8F1F8; color:#0B4F6C;">🔒 Sobre tu ticket #${escaparHTML(numero)}</div>
+      <div class="nombre">${escaparHTML(data.nombre)}</div>
+      ${contenidoHtml}
+      <div class="hora">${data.hora || ''}</div>
+    `;
+
+    if (data.nombre !== miNombre) {
+      const filaResponder = document.createElement('div');
+      filaResponder.classList.add('conv-ticket-input-fila');
+      filaResponder.style.marginTop = '6px';
+      const inputResp = document.createElement('input');
+      inputResp.type = 'text';
+      inputResp.placeholder = `Responder sobre el ticket #${numero}...`;
+      const botonResp = document.createElement('button');
+      botonResp.type = 'button';
+      botonResp.textContent = 'Enviar';
+      filaResponder.appendChild(inputResp);
+      filaResponder.appendChild(botonResp);
+
+      function enviarRespuesta() {
+        const texto = inputResp.value.trim();
+        if (!texto) return;
+        socket.emit('mensaje-ticket', { numero, nombre: miNombre, texto, tipo: 'texto' });
+        inputResp.value = '';
+        filaResponder.remove();
+      }
+      botonResp.addEventListener('click', enviarRespuesta);
+      inputResp.addEventListener('keypress', (e) => { if (e.key === 'Enter') enviarRespuesta(); });
+
+      div.appendChild(filaResponder);
+    }
+
+    mensajesDiv.appendChild(div);
+    mensajesDiv.scrollTop = mensajesDiv.scrollHeight;
+  }
+
   socket.on('historial-ticket', ({ numero, mensajes, error }) => {
     if (numero !== ticketConversacionAbierta) return;
     const contenedorMensajes = document.getElementById('conv-ticket-mensajes');
@@ -1624,8 +1678,20 @@
     }
   });
 
+  // Al conectarse, si hay tickets activos con mensajes pendientes de ver, se muestra
+  // el ultimo mensaje de cada uno directo en el chat principal (sin abrir nada aparte)
+  socket.on('historial-conversaciones-privadas', (conversaciones) => {
+    conversaciones
+      .filter((c) => c.estado !== 'Resuelto' && c.mensajes.length > 0)
+      .forEach((c) => {
+        const ultimoMensaje = c.mensajes[c.mensajes.length - 1];
+        pintarMensajeTicketEnPrincipal({ ...ultimoMensaje, numero: c.numero }, true);
+      });
+  });
+
   socket.on('mensaje-ticket', (data) => {
-    pintarMensajeTicket(data);
+    pintarMensajeTicket(data); // mantiene sincronizado el panel privado, si esta abierto
+    pintarMensajeTicketEnPrincipal(data, false); // y aparece directo en el chat principal
     if (data.nombre !== miNombre) {
       const textoPlano = data.tipo === 'imagen' ? '📷 Imagen' : data.texto;
       const numeroTicket = data.numeroTicket || data.numero || '';
