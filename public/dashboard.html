@@ -220,6 +220,7 @@
   body.modo-oscuro #caja-clave input { background: #2a2a2a; color: #e6e6e6; border-color: #444; }
   body.modo-oscuro .tarjeta,
   body.modo-oscuro #grafico-resumen > div,
+  body.modo-oscuro #calificacion-tecnicos > div,
   body.modo-oscuro .filtros,
   body.modo-oscuro table,
   body.modo-oscuro tr {
@@ -278,6 +279,7 @@
 
   <div class="contenedor">
     <div id="grafico-resumen"></div>
+    <div id="calificacion-tecnicos"></div>
     <div class="tarjetas" id="tarjetas-resumen"></div>
 
     <div class="filtros">
@@ -478,14 +480,21 @@
     document.getElementById('btn-exportar').style.display = puedeVerReportes() ? 'inline-block' : 'none';
   }
 
+  let todasLasSugerencias = [];
+
   async function cargarTodo(mostrarErrorSiFalla = true) {
     try {
-      const [respuestaTickets, respuestaTecnicos] = await Promise.all([
+      const peticiones = [
         fetch('/api/tickets', { headers: cabecerasAuth() }),
         fetch('/api/tecnicos', { headers: cabecerasAuth() })
-      ]);
+      ];
+      if (puedeVerReportes()) {
+        peticiones.push(fetch('/api/sugerencias', { headers: cabecerasAuth() }));
+      }
+      const respuestas = await Promise.all(peticiones);
+      const [respuestaTickets, respuestaTecnicos, respuestaSugerencias] = respuestas;
 
-      if (respuestaTickets.status === 401 || respuestaTecnicos.status === 401) {
+      if (respuestas.some((r) => r.status === 401)) {
         sessionStorage.removeItem('dashboardUsuario');
         sessionStorage.removeItem('dashboardClave');
         mostrarPantallaClave('Tu sesión expiró o no es válida. Entra de nuevo.');
@@ -494,6 +503,7 @@
 
       todosLosTickets = await respuestaTickets.json();
       listaTecnicos = await respuestaTecnicos.json();
+      todasLasSugerencias = respuestaSugerencias ? await respuestaSugerencias.json() : [];
       mostrarDashboard();
       construirFiltroTecnicos();
       renderizarTodo();
@@ -646,6 +656,64 @@
     });
   }
 
+  // Calificacion de cada tecnico, combinando las estrellas de tickets resueltos
+  // y las del buzon de sugerencias. Solo se calcula y muestra si el usuario puede ver Reportes.
+  function renderizarCalificacionTecnicos(tickets) {
+    const contenedor = document.getElementById('calificacion-tecnicos');
+    if (!puedeVerReportes()) {
+      contenedor.innerHTML = '';
+      return;
+    }
+
+    const sumaPorTecnico = {};
+    const conteoPorTecnico = {};
+
+    function agregar(tecnico, calificacion) {
+      if (!tecnico || calificacion == null) return;
+      sumaPorTecnico[tecnico] = (sumaPorTecnico[tecnico] || 0) + calificacion;
+      conteoPorTecnico[tecnico] = (conteoPorTecnico[tecnico] || 0) + 1;
+    }
+
+    tickets.forEach((t) => agregar(t.tecnicoAsignado, t.calificacion));
+    todasLasSugerencias.forEach((s) => agregar(s.tecnicoCalificado, s.calificacion));
+
+    const tecnicosConDatos = Object.keys(conteoPorTecnico);
+    if (tecnicosConDatos.length === 0) {
+      contenedor.innerHTML = `
+        <div style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:6px;">⭐ Calificación de los técnicos</div>
+          <div style="font-size:13px; color:#888;">Todavía no hay calificaciones (ni de tickets resueltos, ni del buzón de sugerencias).</div>
+        </div>
+      `;
+      return;
+    }
+
+    const filas = tecnicosConDatos
+      .map((tecnico) => ({ tecnico, promedio: sumaPorTecnico[tecnico] / conteoPorTecnico[tecnico], total: conteoPorTecnico[tecnico] }))
+      .sort((a, b) => b.promedio - a.promedio)
+      .map(({ tecnico, promedio, total }) => {
+        const porcentaje = (promedio / 5) * 100;
+        return `
+          <div style="margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:3px;">
+              <span>${escaparHTML(tecnico)}</span>
+              <span>${'⭐'.repeat(Math.round(promedio))}${'☆'.repeat(5 - Math.round(promedio))} ${promedio.toFixed(1)} (${total})</span>
+            </div>
+            <div style="background:#eee; border-radius:6px; height:10px; overflow:hidden;">
+              <div style="background:#f5a623; height:100%; width:${porcentaje}%;"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+    contenedor.innerHTML = `
+      <div style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:10px;">⭐ Calificación de los técnicos <span style="font-weight:normal; color:#999;">(tickets + buzón de sugerencias)</span></div>
+        ${filas}
+      </div>
+    `;
+  }
+
   function renderizarTarjetas(tickets) {
     const total = tickets.length;
     const resueltos = tickets.filter((t) => t.estado === 'Resuelto').length;
@@ -654,6 +722,7 @@
     const atrasados = tickets.filter(estaAtrasado).length;
 
     renderizarGraficoResumen(tickets);
+    renderizarCalificacionTecnicos(tickets);
 
     tarjetasResumen.innerHTML = `
       <div class="tarjeta ${filtroRapido === null ? 'activa' : ''}" data-filtro=""><div class="numero">${total}</div><div class="etiqueta">Total</div></div>

@@ -339,6 +339,17 @@ app.get('/api/tecnicos', verificarCredencialesDashboard, (req, res) => {
   res.json(TECNICOS_AUTORIZADOS);
 });
 
+// Devuelve las sugerencias del buzon (para calcular calificaciones en el dashboard)
+app.get('/api/sugerencias', verificarCredencialesDashboard, async (req, res) => {
+  try {
+    const sugerencias = await Sugerencia.find({}).sort({ fecha: -1 });
+    res.json(sugerencias);
+  } catch (err) {
+    console.error('Error en /api/sugerencias:', err.message);
+    res.status(500).json({ error: 'Error obteniendo las sugerencias' });
+  }
+});
+
 // ---------- IA en la nube (Groq, gratis) ----------
 // Se usa como respaldo cuando el bot no reconoce la pregunta con palabras clave.
 // Funciona siempre, sin depender de que tu PC este prendido.
