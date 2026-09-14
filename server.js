@@ -19,15 +19,15 @@ app.use(express.json());
 // Cada tecnico tiene su propio usuario y contraseña. Cambia las contraseñas aqui
 // cuando quieras (son las que cada tecnico usa para entrar al dashboard).
 const CREDENCIALES_DASHBOARD = {
-  'Juan Diego': 'JuanDiego2026',
-  'Juan Pablo': 'JuanPablo2026',
-  'Juan Jose': 'JuanJose2026',
-  'Julian': 'Julian2026',
-  'Yin Carlos': 'YinCarlos2026',
-  'William David': 'WilliamDavid2026',
-  'Henrry': 'Henrry2026',
-  'Hector': 'Hector2026',
-  'Kevin Daniel': 'KevinDaniel2026'
+  'Juan Diego': 'Httxq740*',
+  'Juan Pablo': 'Qfuaw255+',
+  'Juan Jose': 'Cnbdf487!',
+  'Julian': 'Bvgbl004+',
+  'Yin Carlos': 'Glqtk846$',
+  'William David': 'Oomhf132+',
+  'Henrry': 'Cjhyc078*',
+  'Hector': 'Hyqmp601+',
+  'Kevin Daniel': 'Gcdzh252*'
 };
 
 function verificarCredencialesDashboard(req, res, next) {
@@ -1018,6 +1018,69 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Error obteniendo tickets:', err.message);
       socket.emit('lista-tickets', []);
+    }
+  });
+
+  // ---------- Conversacion privada por ticket ----------
+  // Solo puede entrar quien creo el ticket, o un tecnico autorizado (para poder atenderlo).
+  async function puedeVerConversacionTicket(numero, nombre) {
+    const ticket = await Ticket.findOne({ numero });
+    if (!ticket) return null;
+    const esCreador = normalizarTexto(ticket.nombre) === normalizarTexto(nombre || '');
+    if (!esCreador && !esTecnicoAutorizado(nombre)) return null;
+    return ticket;
+  }
+
+  socket.on('unirse-conversacion-ticket', async ({ numero, nombre }) => {
+    try {
+      const ticket = await puedeVerConversacionTicket(numero, nombre);
+      if (!ticket) {
+        socket.emit('historial-ticket', { numero, mensajes: [], error: 'No tienes acceso a esta conversación.' });
+        return;
+      }
+      const salaTicket = `ticket-${numero}`;
+      socket.join(salaTicket);
+      const mensajes = await Mensaje.find({ sala: salaTicket }).sort({ fecha: 1 });
+      socket.emit('historial-ticket', { numero, mensajes, error: null });
+    } catch (err) {
+      console.error('Error al unirse a la conversacion del ticket:', err.message);
+      socket.emit('historial-ticket', { numero, mensajes: [], error: 'Ocurrió un error al abrir la conversación.' });
+    }
+  });
+
+  socket.on('mensaje-ticket', async ({ numero, nombre, texto, tipo }) => {
+    try {
+      const ticket = await puedeVerConversacionTicket(numero, nombre);
+      if (!ticket || !texto) return;
+
+      const salaTicket = `ticket-${numero}`;
+      const mensaje = {
+        sala: salaTicket,
+        nombre,
+        texto,
+        tipo: tipo === 'imagen' ? 'imagen' : 'texto',
+        hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }),
+        numeroTicket: numero
+      };
+      const guardado = await new Mensaje(mensaje).save();
+      mensaje._id = guardado._id;
+      io.to(salaTicket).emit('mensaje-ticket', mensaje);
+
+      // Aviso discreto en el chat general de soporte, sin mostrar el contenido, para que
+      // un tecnico que no tenga abierta la conversacion sepa que hay actividad en ese ticket.
+      if (esTecnicoAutorizado(nombre)) return; // si escribe un tecnico, no hace falta avisar de nuevo
+      const aviso = {
+        sala: SALA_SOPORTE,
+        nombre: NOMBRE_BOT_SOPORTE,
+        texto: `💬 ${nombre} escribió en la conversación privada del ticket #${numero}.`,
+        tipo: 'texto',
+        hora: mensaje.hora
+      };
+      // Este aviso solo se guarda para los tecnicos que tengan el panel tecnico abierto;
+      // no se guarda en la base de datos para no mezclar los historiales.
+      io.to(SALA_SOPORTE).emit('aviso-conversacion-ticket', aviso);
+    } catch (err) {
+      console.error('Error guardando mensaje del ticket:', err.message);
     }
   });
 

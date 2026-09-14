@@ -216,7 +216,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -230,6 +230,28 @@
     max-height: 260px;
     overflow-y: auto;
     z-index: 10;
+  }
+  #panel-conversacion-ticket { max-height: 400px; display: flex; flex-direction: column; }
+  #conv-ticket-mensajes { flex: 1; overflow-y: auto; padding: 4px; }
+  #conv-ticket-mensajes .mensaje { max-width: 90%; }
+  .conv-ticket-input-fila { display: flex; gap: 6px; margin-top: 6px; }
+  .conv-ticket-input-fila input[type="text"] {
+    flex: 1;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+  }
+  .conv-ticket-input-fila button {
+    background: #1E88E5;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  .btn-abrir-conversacion {
+    background: #0B4F6C !important;
+    color: white !important;
   }
   #opciones-panel {
     max-height: 320px;
@@ -515,10 +537,16 @@
   body.modo-oscuro #panel-tecnico,
   body.modo-oscuro #panel-ia,
   body.modo-oscuro #panel-reportes,
+  body.modo-oscuro #panel-conversacion-ticket,
   body.modo-oscuro #opciones-panel {
     background: #1e1e1e;
     color: #e6e6e6;
     border-color: #333;
+  }
+  body.modo-oscuro .conv-ticket-input-fila input[type="text"] {
+    background: #2a2a2a;
+    color: #e6e6e6;
+    border-color: #444;
   }
   body.modo-oscuro .item-ticket,
   body.modo-oscuro .seccion-reporte,
@@ -576,6 +604,7 @@
   <div id="panel-tecnico"></div>
   <div id="panel-ia"></div>
   <div id="panel-reportes"></div>
+  <div id="panel-conversacion-ticket"></div>
   <div id="opciones-panel"></div>
 
   <form id="form-mensaje">
@@ -614,6 +643,7 @@
   const panelTecnico = document.getElementById('panel-tecnico');
   const panelIA = document.getElementById('panel-ia');
   const panelReportes = document.getElementById('panel-reportes');
+  const panelConversacionTicket = document.getElementById('panel-conversacion-ticket');
 
   // Debe coincidir con la lista TECNICOS_AUTORIZADOS de server.js
   const EQUIPO_TECNICO = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Julian', 'Yin Carlos', 'William David', 'Henrry', 'Hector', 'Kevin Daniel'];
@@ -716,7 +746,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -831,6 +861,29 @@
   // ---------- Sistema de tickets (Soporte Tecnico) ----------
   const categoriasTicket = ['💻 Equipos de cómputo', '🖨️ Impresoras', '📶 Red y conectividad', '💿 Software', '❔ Otros'];
 
+  const preguntasGuiadasPorCategoria = {
+    '💻 Equipos de cómputo': [
+      { id: 'equipo', pregunta: '¿Qué equipo es?', tipo: 'texto', placeholder: 'Ej: laptop Dell, PC de escritorio...' },
+      { id: 'problema', pregunta: '¿Qué le pasa?', tipo: 'opciones', opciones: ['No enciende', 'Muy lento', 'Pantalla azul o se cuelga', 'Otro'] },
+      { id: 'desde', pregunta: '¿Desde cuándo tiene el problema?', tipo: 'texto', placeholder: 'Ej: desde ayer, hace una semana...' }
+    ],
+    '🖨️ Impresoras': [
+      { id: 'impresora', pregunta: '¿Qué impresora es?', tipo: 'texto', placeholder: 'Nombre o ubicación' },
+      { id: 'problema', pregunta: '¿Qué le pasa?', tipo: 'opciones', opciones: ['No imprime', 'Se atasca el papel', 'Mala calidad', 'No conecta', 'Otro'] },
+      { id: 'compartida', pregunta: '¿Es una impresora compartida o solo tuya?', tipo: 'opciones', opciones: ['Compartida', 'Solo mía'] }
+    ],
+    '📶 Red y conectividad': [
+      { id: 'tipo', pregunta: '¿Es por cable o wifi?', tipo: 'opciones', opciones: ['Cable', 'WiFi'] },
+      { id: 'alcance', pregunta: '¿Le pasa solo a ti o a toda el área?', tipo: 'opciones', opciones: ['Solo a mí', 'A toda el área'] },
+      { id: 'error', pregunta: '¿Qué mensaje o error ves? (si aparece alguno)', tipo: 'texto', placeholder: 'Opcional' }
+    ],
+    '💿 Software': [
+      { id: 'programa', pregunta: '¿Qué programa o sistema es?', tipo: 'texto', placeholder: 'Nombre del programa' },
+      { id: 'error', pregunta: '¿Qué error te muestra?', tipo: 'texto', placeholder: 'Describe el mensaje de error' },
+      { id: 'actualizacion', pregunta: '¿Empezó después de alguna actualización o instalación reciente?', tipo: 'opciones', opciones: ['Sí', 'No', 'No sé'] }
+    ]
+  };
+
   function construirPanelTicket(escalar) {
     ticketPanel.innerHTML = '';
     const titulo = document.createElement('div');
@@ -853,8 +906,58 @@
     ticketPanel.innerHTML = '';
     const titulo = document.createElement('div');
     titulo.classList.add('faq-titulo');
-    titulo.textContent = `${categoria} — Describe tu problema:`;
+    titulo.textContent = `${categoria} — Cuéntanos qué pasa:`;
     ticketPanel.appendChild(titulo);
+
+    // ---- Preguntas guiadas (si la categoria tiene definidas) ----
+    const preguntasGuiadas = preguntasGuiadasPorCategoria[categoria] || [];
+    const respuestasGuiadas = {}; // id -> valor elegido/escrito
+
+    preguntasGuiadas.forEach((pregunta) => {
+      const bloque = document.createElement('div');
+      bloque.style.cssText = 'margin-bottom:10px;';
+
+      const etiqueta = document.createElement('div');
+      etiqueta.textContent = pregunta.pregunta;
+      etiqueta.style.cssText = 'font-size:13px; color:#555; margin-bottom:4px; font-weight:bold;';
+      bloque.appendChild(etiqueta);
+
+      if (pregunta.tipo === 'texto') {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = pregunta.placeholder || '';
+        input.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc;';
+        input.addEventListener('input', () => { respuestasGuiadas[pregunta.id] = input.value.trim(); });
+        bloque.appendChild(input);
+      } else {
+        const grupoBotones = document.createElement('div');
+        grupoBotones.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px;';
+        pregunta.opciones.forEach((opcion) => {
+          const botonOpcion = document.createElement('button');
+          botonOpcion.type = 'button';
+          botonOpcion.textContent = opcion;
+          botonOpcion.style.cssText = 'background:#f0f0f0; color:#333; padding:6px 10px; font-size:12px;';
+          botonOpcion.addEventListener('click', () => {
+            respuestasGuiadas[pregunta.id] = opcion;
+            grupoBotones.querySelectorAll('button').forEach((b) => {
+              b.style.background = '#f0f0f0';
+              b.style.color = '#333';
+            });
+            botonOpcion.style.background = '#1E88E5';
+            botonOpcion.style.color = 'white';
+          });
+          grupoBotones.appendChild(botonOpcion);
+        });
+        bloque.appendChild(grupoBotones);
+      }
+
+      ticketPanel.appendChild(bloque);
+    });
+
+    const etiquetaExtra = document.createElement('div');
+    etiquetaExtra.textContent = preguntasGuiadas.length > 0 ? '¿Algo más que quieras agregar? (opcional)' : 'Describe tu problema:';
+    etiquetaExtra.style.cssText = 'font-size:13px; color:#555; margin-bottom:4px; font-weight:bold;';
+    ticketPanel.appendChild(etiquetaExtra);
 
     const textarea = document.createElement('textarea');
     textarea.rows = 3;
@@ -961,8 +1064,29 @@
     botonEnviar.textContent = escalar ? 'Enviar al técnico' : 'Crear ticket';
     botonEnviar.classList.add('boton-enviar-ticket');
     botonEnviar.addEventListener('click', () => {
-      const descripcion = textarea.value.trim();
-      if (!descripcion) return;
+      const textoExtra = textarea.value.trim();
+
+      let descripcion;
+      if (preguntasGuiadas.length > 0) {
+        const partesGuiadas = preguntasGuiadas
+          .map((p) => {
+            const respuesta = respuestasGuiadas[p.id];
+            if (!respuesta) return null;
+            const etiquetaCorta = p.pregunta.replace(/[¿?]/g, '');
+            return `${etiquetaCorta}: ${respuesta}`;
+          })
+          .filter(Boolean);
+
+        if (partesGuiadas.length === 0 && !textoExtra) {
+          alert('Responde al menos una pregunta o describe tu problema.');
+          return;
+        }
+        descripcion = [...partesGuiadas, textoExtra].filter(Boolean).join(' | ');
+      } else {
+        descripcion = textoExtra;
+        if (!descripcion) return;
+      }
+
       socket.emit('crear-ticket', {
         nombre: miNombre,
         sala: miSala,
@@ -1060,6 +1184,13 @@
         ${tecnicoHtml}
         ${solucionHtml}
       `;
+      const botonConversacion = document.createElement('button');
+      botonConversacion.type = 'button';
+      botonConversacion.classList.add('btn-abrir-conversacion');
+      botonConversacion.style.cssText = 'width:100%; margin-top:6px; padding:6px;';
+      botonConversacion.textContent = '💬 Conversación privada con soporte';
+      botonConversacion.addEventListener('click', () => abrirConversacionTicket(ticket.numero));
+      item.appendChild(botonConversacion);
       ticketsPanel.appendChild(item);
     });
 
@@ -1177,6 +1308,14 @@
       }
 
       if (acciones.children.length > 0) item.appendChild(acciones);
+
+      const botonConversacion = document.createElement('button');
+      botonConversacion.type = 'button';
+      botonConversacion.classList.add('btn-abrir-conversacion');
+      botonConversacion.style.cssText = 'width:100%; margin-top:6px; padding:6px;';
+      botonConversacion.textContent = '💬 Conversación privada';
+      botonConversacion.addEventListener('click', () => abrirConversacionTicket(ticket.numero));
+      item.appendChild(botonConversacion);
       panelTecnico.appendChild(item);
     });
 
@@ -1332,6 +1471,93 @@
     enlace.download = `reporte-soporte-tecnico-${new Date().toISOString().slice(0, 10)}.csv`;
     enlace.click();
   }
+
+  // ---------- Conversacion privada por ticket ----------
+  let ticketConversacionAbierta = null;
+
+  function abrirConversacionTicket(numero) {
+    ticketConversacionAbierta = numero;
+    panelConversacionTicket.innerHTML = '';
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = `💬 Conversación privada — Ticket #${numero}`;
+    panelConversacionTicket.appendChild(titulo);
+
+    const contenedorMensajes = document.createElement('div');
+    contenedorMensajes.id = 'conv-ticket-mensajes';
+    panelConversacionTicket.appendChild(contenedorMensajes);
+
+    const filaInput = document.createElement('div');
+    filaInput.classList.add('conv-ticket-input-fila');
+    const inputTexto = document.createElement('input');
+    inputTexto.type = 'text';
+    inputTexto.placeholder = 'Escribe un mensaje...';
+    const botonEnviar = document.createElement('button');
+    botonEnviar.type = 'button';
+    botonEnviar.textContent = 'Enviar';
+    filaInput.appendChild(inputTexto);
+    filaInput.appendChild(botonEnviar);
+    panelConversacionTicket.appendChild(filaInput);
+
+    function enviar() {
+      const texto = inputTexto.value.trim();
+      if (!texto) return;
+      socket.emit('mensaje-ticket', { numero, nombre: miNombre, texto, tipo: 'texto' });
+      inputTexto.value = '';
+    }
+    botonEnviar.addEventListener('click', enviar);
+    inputTexto.addEventListener('keypress', (e) => { if (e.key === 'Enter') enviar(); });
+
+    agregarBotonVolver(panelConversacionTicket);
+
+    cerrarPaneles(panelConversacionTicket);
+    panelConversacionTicket.style.display = 'flex';
+    socket.emit('unirse-conversacion-ticket', { numero, nombre: miNombre });
+  }
+
+  function pintarMensajeTicket(data) {
+    if (data.numeroTicket !== ticketConversacionAbierta && data.numero !== ticketConversacionAbierta) return;
+    const contenedorMensajes = document.getElementById('conv-ticket-mensajes');
+    if (!contenedorMensajes) return;
+
+    const div = document.createElement('div');
+    div.classList.add('mensaje');
+    if (data.nombre === miNombre) div.classList.add('propio');
+    const contenidoHtml = data.tipo === 'imagen'
+      ? `<img class="imagen-chat" src="${data.texto}" alt="imagen enviada">`
+      : `<div class="texto">${escaparHTML(data.texto).replace(/\n/g, '<br>')}</div>`;
+    div.innerHTML = `
+      <div class="nombre">${escaparHTML(data.nombre)}</div>
+      ${contenidoHtml}
+      <div class="hora">${data.hora || ''}</div>
+    `;
+    contenedorMensajes.appendChild(div);
+    contenedorMensajes.scrollTop = contenedorMensajes.scrollHeight;
+  }
+
+  socket.on('historial-ticket', ({ numero, mensajes, error }) => {
+    if (numero !== ticketConversacionAbierta) return;
+    const contenedorMensajes = document.getElementById('conv-ticket-mensajes');
+    if (!contenedorMensajes) return;
+    if (error) {
+      contenedorMensajes.innerHTML = `<div class="faq-titulo">${escaparHTML(error)}</div>`;
+      return;
+    }
+    contenedorMensajes.innerHTML = '';
+    if (mensajes.length === 0) {
+      contenedorMensajes.innerHTML = '<div class="faq-titulo">Todavía no hay mensajes en esta conversación.</div>';
+    } else {
+      mensajes.forEach((m) => pintarMensajeTicket({ ...m, numero }));
+    }
+  });
+
+  socket.on('mensaje-ticket', pintarMensajeTicket);
+
+  // Aviso discreto para tecnicos cuando hay actividad en un ticket que no tienen abierto
+  socket.on('aviso-conversacion-ticket', (aviso) => {
+    if (esTecnicoActual()) pintarMensaje(aviso);
+  });
 
   function construirPanelReportes(metricas) {
     panelReportes.innerHTML = '';
