@@ -348,6 +348,8 @@
   const filtroTecnico = document.getElementById('filtro-tecnico');
   const filtroPrioridad = document.getElementById('filtro-prioridad');
   const busquedaDashboard = document.getElementById('busqueda-dashboard');
+  let numerosBusquedaAvanzada = null; // null = sin resultados de Atlas Search todavia para el termino actual
+  let temporizadorBusqueda = null;
 
   const btnModoOscuroDash = document.getElementById('btn-modo-oscuro-dash');
   function aplicarModoOscuroDash(activo) {
@@ -759,9 +761,16 @@
     }
     const termino = busquedaDashboard.value.trim().toLowerCase();
     if (termino) {
-      filtrados = filtrados.filter((t) =>
-        `${t.numero} ${t.nombre} ${t.descripcion} ${t.categoria} ${t.tecnicoAsignado || ''}`.toLowerCase().includes(termino)
-      );
+      if (numerosBusquedaAvanzada !== null) {
+        // Ya tenemos resultados de Atlas Search para este termino: los usamos
+        filtrados = filtrados.filter((t) => numerosBusquedaAvanzada.includes(t.numero));
+      } else {
+        // Mientras llega la respuesta de Atlas Search, filtramos localmente para que
+        // no se vea vacio (busqueda simple, se reemplaza en cuanto responda el servidor)
+        filtrados = filtrados.filter((t) =>
+          `${t.numero} ${t.nombre} ${t.descripcion} ${t.categoria} ${t.tecnicoAsignado || ''}`.toLowerCase().includes(termino)
+        );
+      }
     }
     return filtrados;
   }
@@ -854,7 +863,28 @@
   filtroEstado.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
   filtroTecnico.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
   filtroPrioridad.addEventListener('change', () => { filtroRapido = null; renderizarTodo(); });
-  busquedaDashboard.addEventListener('input', () => renderizarTodo());
+  busquedaDashboard.addEventListener('input', () => {
+    numerosBusquedaAvanzada = null; // el termino cambio, invalidamos el resultado anterior
+    renderizarTodo(); // muestra de una vez el filtro simple, mientras llega Atlas Search
+
+    clearTimeout(temporizadorBusqueda);
+    const termino = busquedaDashboard.value.trim();
+    if (!termino) return;
+
+    temporizadorBusqueda = setTimeout(async () => {
+      try {
+        const respuesta = await fetch(`/api/tickets/buscar?q=${encodeURIComponent(termino)}`, { headers: cabecerasAuth() });
+        if (!respuesta.ok) return; // si falla, nos quedamos con el filtro simple de respaldo
+        const resultados = await respuesta.json();
+        // Si el usuario ya cambio el texto mientras esperabamos, ignoramos esta respuesta vieja
+        if (busquedaDashboard.value.trim() !== termino) return;
+        numerosBusquedaAvanzada = resultados.map((t) => t.numero);
+        renderizarTodo();
+      } catch (err) {
+        // Sin conexion o error: se queda el filtro simple de respaldo, sin romper nada
+      }
+    }, 350);
+  });
   document.getElementById('btn-actualizar').addEventListener('click', () => cargarTodo());
 
   async function llamarAccion(numero, accion, cuerpo) {

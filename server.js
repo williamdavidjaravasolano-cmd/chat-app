@@ -189,6 +189,31 @@ app.get('/api/tickets', verificarCredencialesDashboard, async (req, res) => {
   }
 });
 
+// Busqueda de texto avanzada usando el indice de Atlas Search "busqueda_tickets"
+// (entiende variaciones de palabras, no solo coincidencia exacta como el buscador anterior)
+app.get('/api/tickets/buscar', verificarCredencialesDashboard, async (req, res) => {
+  const termino = (req.query.q || '').trim();
+  if (!termino) return res.json([]);
+  try {
+    const resultados = await Ticket.aggregate([
+      {
+        $search: {
+          index: 'busqueda_tickets',
+          text: {
+            query: termino,
+            path: { wildcard: '*' }
+          }
+        }
+      },
+      { $limit: 50 }
+    ]);
+    res.json(resultados);
+  } catch (err) {
+    console.error('Error en la busqueda avanzada de tickets:', err.message);
+    res.status(500).json({ error: 'Error en la búsqueda avanzada' });
+  }
+});
+
 // Tomar un caso desde el dashboard
 app.post('/api/tickets/:numero/tomar', verificarCredencialesDashboard, async (req, res) => {
   try {
