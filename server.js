@@ -61,42 +61,23 @@ const mensajeSchema = new mongoose.Schema({
   texto: { type: String, required: true },
   tipo: { type: String, default: 'texto' }, // 'texto' o 'imagen'
   hora: String,
-  fecha: { type: Date, default: Date.now },
+  // TTL nativo de MongoDB: cada mensaje se autodestruye solo, 24 horas despues de su
+  // propia fecha de creacion (chat general y conversaciones privadas de tickets, ambas
+  // usan esta misma coleccion, asi que las dos quedan cubiertas). Reemplaza la limpieza
+  // manual que haciamos antes con un setInterval en el servidor.
+  fecha: { type: Date, default: Date.now, expires: 86400 },
   esRespuestaFaq: { type: Boolean, default: false }, // true si es respuesta automatica de una pregunta frecuente
   esRespuestaIA: { type: Boolean, default: false }, // true si la respondio la IA (Groq), no las palabras clave
   preguntaOrigen: { type: String, default: null }, // la pregunta que genero esta respuesta
   numeroTicket: { type: String, default: null } // el ticket relacionado con esta respuesta, si aplica
 });
+mensajeSchema.index({ sala: 1, fecha: 1 }); // acelera cargar el historial de una sala ordenado por fecha
 const Mensaje = mongoose.model('Mensaje', mensajeSchema);
 
-// ---------- Limpieza automatica del historial del chat cada 24 horas ----------
-// Borra TODOS los mensajes (chat general y conversaciones privadas de tickets).
-// No borra los tickets en si, ni el conocimiento aprendido, solo los mensajes de chat.
-const limpiezaHistorialSchema = new mongoose.Schema({
-  fecha: { type: Date, default: Date.now }
-});
-const LimpiezaHistorial = mongoose.model('LimpiezaHistorial', limpiezaHistorialSchema);
+// Nota: la limpieza del historial del chat cada 24h ahora la hace MongoDB directamente
+// (ver el TTL nativo en el campo "fecha" del mensajeSchema, arriba). Ya no hace falta
+// este codigo revisando manualmente cada cierto tiempo.
 
-async function revisarYLimpiarHistorial() {
-  try {
-    let registro = await LimpiezaHistorial.findOne({});
-    if (!registro) {
-      // Primera vez que corre: solo dejamos la marca de tiempo, sin borrar nada todavia.
-      await new LimpiezaHistorial({ fecha: new Date() }).save();
-      return;
-    }
-
-    const horasTranscurridas = (Date.now() - registro.fecha.getTime()) / (1000 * 60 * 60);
-    if (horasTranscurridas >= 24) {
-      const resultado = await Mensaje.deleteMany({});
-      registro.fecha = new Date();
-      await registro.save();
-      console.log(`Historial del chat borrado automáticamente (${resultado.deletedCount} mensajes eliminados).`);
-    }
-  } catch (err) {
-    console.error('Error revisando/limpiando el historial del chat:', err.message);
-  }
-}
 
 
 // ---------- Modelo de votos de la encuesta de satisfaccion ----------
@@ -131,6 +112,9 @@ const ticketSchema = new mongoose.Schema({
   historial: [{ estado: String, fecha: { type: Date, default: Date.now } }],
   fechaCreacion: { type: Date, default: Date.now }
 });
+ticketSchema.index({ nombre: 1 }); // acelera "Mis tickets" (busca por quien lo creo)
+ticketSchema.index({ tecnicoAsignado: 1, estado: 1 }); // acelera el Panel tecnico y el Dashboard
+ticketSchema.index({ estado: 1, fechaCreacion: 1 }); // acelera la asignacion automatica y los reportes
 const Ticket = mongoose.model('Ticket', ticketSchema);
 
 async function generarNumeroTicket() {
@@ -419,6 +403,7 @@ const sugerenciaSchema = new mongoose.Schema({
   mensaje: { type: String, required: true },
   fecha: { type: Date, default: Date.now }
 });
+sugerenciaSchema.index({ tecnicoCalificado: 1 }); // acelera calcular el promedio por tecnico
 const Sugerencia = mongoose.model('Sugerencia', sugerenciaSchema);
 
 // ---------- Preguntas frecuentes por sala ----------
@@ -532,9 +517,7 @@ function buscarPreguntaFaq(lista, textoNormalizado) {
 // Al iniciar el servidor, cargamos las soluciones aprendidas de tickets
 // resueltos anteriormente, para que sigan funcionando aunque Render reinicie.
 mongoose.connection.once('open', async () => {
-  // Revisa de una vez si toca limpiar el historial, y despues cada 30 minutos
-  revisarYLimpiarHistorial();
-  setInterval(revisarYLimpiarHistorial, 30 * 60 * 1000);
+  // El historial del chat (mensajes) ya se autolimpia con el TTL nativo de MongoDB (24h).
 
   // Revisa cada minuto si hay tickets sin tomar que ya cumplieron el tiempo de espera
   setInterval(asignarTicketsAutomaticamente, 60 * 1000);
