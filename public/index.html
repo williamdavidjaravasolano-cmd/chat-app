@@ -2198,15 +2198,16 @@
       div.appendChild(encuesta);
     }
 
-    // Si fue la IA quien respondio, ofrecemos crear un ticket con la pregunta original,
-    // por si la respuesta no resolvio el problema (sin inventar portales externos)
-    if (data.esRespuestaIA && data.preguntaOrigen) {
+    // Ofrecemos crear un ticket con la pregunta original, por si la respuesta automatica
+    // (de palabras clave o de la IA) no resolvio el problema
+    if (data.esRespuestaFaq && data.preguntaOrigen) {
+      const quienRespondio = data.esRespuestaIA ? 'La IA ya sugirió' : 'El bot ya sugirió';
       const botonTicketIA = document.createElement('button');
       botonTicketIA.type = 'button';
       botonTicketIA.textContent = '🎫 ¿Sigue el problema? Crear ticket con esta información';
       botonTicketIA.style.cssText = 'display:block; width:100%; margin-top:6px; background:#0B4F6C; color:white; padding:8px; border:none; border-radius:6px; cursor:pointer; font-size:12px;';
       botonTicketIA.addEventListener('click', () => {
-        textoPrellenadoTicket = `${data.preguntaOrigen}\n\n(La IA ya sugirió: ${data.texto})`;
+        textoPrellenadoTicket = `${data.preguntaOrigen}\n\n(${quienRespondio}: ${data.texto})`;
         cerrarPaneles(ticketPanel);
         ticketPanel.style.display = 'block';
         mostrarFormularioTicket('❔ Otros', false);
