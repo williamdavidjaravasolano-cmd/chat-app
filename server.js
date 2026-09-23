@@ -419,8 +419,11 @@ const EMAIL_DESTINO = process.env.EMAIL_DESTINO || EMAIL_USUARIO;
 let transportadorCorreo = null;
 if (EMAIL_USUARIO && EMAIL_CLAVE) {
   transportadorCorreo = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: EMAIL_USUARIO, pass: EMAIL_CLAVE }
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // false para el puerto 587 (usa STARTTLS); el puerto 465 (secure:true) a veces se bloquea en hosting en la nube
+    auth: { user: EMAIL_USUARIO, pass: EMAIL_CLAVE },
+    connectionTimeout: 15000
   });
 }
 
