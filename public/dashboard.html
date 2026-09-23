@@ -220,6 +220,7 @@
   body.modo-oscuro #caja-clave input { background: #2a2a2a; color: #e6e6e6; border-color: #444; }
   body.modo-oscuro .tarjeta,
   body.modo-oscuro #grafico-resumen > div,
+  body.modo-oscuro #panel-estado-sistema,
   body.modo-oscuro #calificacion-tecnicos > div,
   body.modo-oscuro .filtros,
   body.modo-oscuro table,
@@ -277,11 +278,15 @@
     </div>
   </header>
 
-  <div id="banner-estado-sistema" style="display:none; background:#fdeaea; color:#c62828; padding:10px 16px; font-size:13px; text-align:center; font-weight:bold;">
-    ⚠️ <span id="texto-banner-estado"></span> — <a href="/estado.html" target="_blank" style="color:#c62828; text-decoration:underline;">ver detalle</a>
-  </div>
-
   <div class="contenedor">
+    <div id="panel-estado-sistema" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="font-size:13px; color:#555; font-weight:bold;">📡 Estado del sistema</div>
+        <a href="/estado.html" target="_blank" style="font-size:11px; color:#0B4F6C;">Ver página completa ↗</a>
+      </div>
+      <div id="lista-estado-servicios" style="display:flex; gap:10px; flex-wrap:wrap;"></div>
+    </div>
+
     <div id="grafico-resumen"></div>
     <div id="calificacion-tecnicos"></div>
     <div class="tarjetas" id="tarjetas-resumen"></div>
@@ -993,27 +998,30 @@
 
   setInterval(() => cargarTodo(false), 20000);
 
-  // ---------- Aviso de estado del sistema (banner arriba, si algo no esta operativo) ----------
+  // ---------- Panel fijo de estado del sistema (siempre visible) ----------
+  function badgeServicio(nombre, operativo) {
+    const color = operativo === true ? '#1e8e4e' : (operativo === false ? '#c62828' : '#888');
+    const fondo = operativo === true ? '#e6f6ec' : (operativo === false ? '#fdeaea' : '#f0f0f0');
+    const texto = operativo === true ? 'Operativo' : (operativo === false ? 'No disponible' : 'Sin datos');
+    return `
+      <div style="background:${fondo}; color:${color}; border-radius:8px; padding:8px 12px; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px; flex:1; min-width:140px; justify-content:center;">
+        <span style="width:8px; height:8px; border-radius:50%; background:${color}; display:inline-block;"></span>
+        ${nombre}: ${texto}
+      </div>
+    `;
+  }
+
   async function revisarEstadoSistema() {
+    const contenedorEstado = document.getElementById('lista-estado-servicios');
     try {
       const respuesta = await fetch('/api/estado');
       const datos = await respuesta.json();
-      const caidos = [];
-      if (!datos.chat) caidos.push('el servidor');
-      if (!datos.baseDatos) caidos.push('la base de datos');
-      if (!datos.ia) caidos.push('la inteligencia artificial');
-
-      const banner = document.getElementById('banner-estado-sistema');
-      const texto = document.getElementById('texto-banner-estado');
-      if (caidos.length > 0) {
-        texto.textContent = `Actualmente hay un problema con: ${caidos.join(', ')}`;
-        banner.style.display = 'block';
-      } else {
-        banner.style.display = 'none';
-      }
+      contenedorEstado.innerHTML =
+        badgeServicio('💬 Servidor', datos.chat) +
+        badgeServicio('🗄️ Base de datos', datos.baseDatos) +
+        badgeServicio('🤖 IA', datos.ia);
     } catch (err) {
-      // Si ni siquiera se pudo consultar, no forzamos el banner aqui (el resto del
-      // dashboard ya avisa si no hay conexion al intentar cargar los tickets)
+      contenedorEstado.innerHTML = badgeServicio('💬 Servidor', false) + badgeServicio('🗄️ Base de datos', null) + badgeServicio('🤖 IA', null);
     }
   }
   revisarEstadoSistema();
