@@ -405,34 +405,26 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 let estadoIA = { operativo: null, fecha: null };
 
 // ---------- Alertas por correo cuando un servicio deja de funcionar ----------
+// Render bloquea las conexiones SMTP directas (por eso Gmail via nodemailer no
+// funcionaba), asi que el correo se envia con Resend, un servicio que entrega
+// el correo por una API normal de internet (HTTPS), gratis hasta 3000 correos/mes.
 // Se configura con variables de entorno en Render:
-//   EMAIL_USUARIO  -> la cuenta de Gmail que envia el correo (necesita una "clave de aplicacion", no la clave normal)
-//   EMAIL_CLAVE    -> esa clave de aplicacion de 16 caracteres
-//   EMAIL_DESTINO  -> a quien le llega la alerta (puede ser varias, separadas por coma)
+//   RESEND_API_KEY -> la clave que te da resend.com al crear la cuenta
+//   EMAIL_DESTINO   -> a quien le llega la alerta (puede ser varias, separadas por coma)
 // Si estas variables no estan configuradas, esta funcion simplemente no hace nada.
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-const EMAIL_USUARIO = process.env.EMAIL_USUARIO;
-const EMAIL_CLAVE = process.env.EMAIL_CLAVE;
-const EMAIL_DESTINO = process.env.EMAIL_DESTINO || EMAIL_USUARIO;
-
-let transportadorCorreo = null;
-if (EMAIL_USUARIO && EMAIL_CLAVE) {
-  transportadorCorreo = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // false para el puerto 587 (usa STARTTLS); el puerto 465 (secure:true) a veces se bloquea en hosting en la nube
-    auth: { user: EMAIL_USUARIO, pass: EMAIL_CLAVE },
-    connectionTimeout: 15000
-  });
-}
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const EMAIL_DESTINO = process.env.EMAIL_DESTINO;
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 async function enviarCorreoAlerta(asunto, mensaje) {
-  if (!transportadorCorreo) return;
+  if (!resend || !EMAIL_DESTINO) return;
   try {
-    await transportadorCorreo.sendMail({
-      from: `"Estado del Sistema - Soporte Tecnico" <${EMAIL_USUARIO}>`,
-      to: EMAIL_DESTINO,
+    const destinatarios = EMAIL_DESTINO.split(',').map((correo) => correo.trim()).filter(Boolean);
+    await resend.emails.send({
+      from: 'Estado del Sistema <onboarding@resend.dev>',
+      to: destinatarios,
       subject: asunto,
       text: mensaje
     });
@@ -448,7 +440,7 @@ let ultimoEstadoConocido = { chat: true, baseDatos: true, ia: true };
 const NOMBRES_SERVICIOS = { chat: 'el servidor', baseDatos: 'la base de datos', ia: 'la inteligencia artificial' };
 
 async function revisarYAlertarPorCorreo() {
-  if (!transportadorCorreo) return; // no configurado, no hacemos nada
+  if (!resend || !EMAIL_DESTINO) return; // no configurado, no hacemos nada
 
   const estadoActual = await obtenerEstadoCompleto();
 
