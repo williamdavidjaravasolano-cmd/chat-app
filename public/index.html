@@ -581,7 +581,23 @@
 <body>
 
 <div id="login-box">
-  <div id="login-normal">
+  <div id="login-consentimiento">
+    <h2>🔒 Protección de datos personales</h2>
+    <p style="font-size:13px; color:#444; text-align:left; line-height:1.5;">
+      De acuerdo con la <strong>Ley 1581 de 2012</strong> de protección de datos personales, para poder darte soporte técnico necesitamos guardar tu nombre, área, cargo y extensión, junto con los mensajes que envíes en este chat.
+    </p>
+    <p style="font-size:13px; color:#444; text-align:left; line-height:1.5;">
+      Esta información se usa únicamente para gestionar tu caso de soporte técnico. Puedes solicitar en cualquier momento que se modifique, actualice o elimine.
+    </p>
+    <p style="font-size:14px; color:#0B4F6C; font-weight:bold; margin-top:10px;">¿Autorizas el tratamiento de tus datos para continuar?</p>
+    <button id="btn-acepto-datos">✅ Acepto</button>
+    <button id="btn-no-acepto-datos" style="background:#e0e0e0; color:#333; margin-top:6px;">No acepto</button>
+    <div id="mensaje-no-acepto" style="display:none; color:#d32f2f; font-size:13px; margin-top:8px;">
+      No podemos darte soporte por este medio sin tu autorización. Puedes cerrar esta ventana, o volver a intentarlo si cambias de opinión.
+    </div>
+  </div>
+
+  <div id="login-normal" style="display:none;">
     <h2>Soporte Técnico</h2>
     <input type="text" id="input-nombre" placeholder="Escribe tu nombre" maxlength="20">
 
@@ -649,6 +665,30 @@
 
   const loginBox = document.getElementById('login-box');
   const chatContainer = document.getElementById('chat-container');
+  // ---------- Consentimiento de proteccion de datos (Ley 1581 de 2012) ----------
+  const loginConsentimiento = document.getElementById('login-consentimiento');
+  const loginNormalDiv = document.getElementById('login-normal');
+  const btnAceptoDatos = document.getElementById('btn-acepto-datos');
+  const btnNoAceptoDatos = document.getElementById('btn-no-acepto-datos');
+  const mensajeNoAcepto = document.getElementById('mensaje-no-acepto');
+
+  if (localStorage.getItem('consentimientoDatosAceptado') === 'true') {
+    loginConsentimiento.style.display = 'none';
+    loginNormalDiv.style.display = 'block';
+  }
+
+  btnAceptoDatos.addEventListener('click', () => {
+    localStorage.setItem('consentimientoDatosAceptado', 'true');
+    loginConsentimiento.style.display = 'none';
+    loginNormalDiv.style.display = 'block';
+  });
+
+  btnNoAceptoDatos.addEventListener('click', () => {
+    btnAceptoDatos.style.display = 'none';
+    btnNoAceptoDatos.style.display = 'none';
+    mensajeNoAcepto.style.display = 'block';
+  });
+
   const inputNombre = document.getElementById('input-nombre');
   const inputClaveTecnico = document.getElementById('input-clave-tecnico');
   const errorLoginTecnico = document.getElementById('error-login-tecnico');
