@@ -656,6 +656,9 @@ mongoose.connection.once('open', async () => {
 
   // Revisa cada 5 minutos el estado de los servicios, y manda un correo si algo
   // cambia (se cae, o se recupera). Si no hay correo configurado, no hace nada.
+  // Tambien revisa una vez de inmediato al arrancar, para no depender de esperar
+  // 5 minutos completos despues de cada reinicio del servidor.
+  revisarYAlertarPorCorreo();
   setInterval(revisarYAlertarPorCorreo, 5 * 60 * 1000);
 
   try {
