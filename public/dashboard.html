@@ -277,6 +277,10 @@
     </div>
   </header>
 
+  <div id="banner-estado-sistema" style="display:none; background:#fdeaea; color:#c62828; padding:10px 16px; font-size:13px; text-align:center; font-weight:bold;">
+    ⚠️ <span id="texto-banner-estado"></span> — <a href="/estado.html" target="_blank" style="color:#c62828; text-decoration:underline;">ver detalle</a>
+  </div>
+
   <div class="contenedor">
     <div id="grafico-resumen"></div>
     <div id="calificacion-tecnicos"></div>
@@ -988,6 +992,32 @@
   });
 
   setInterval(() => cargarTodo(false), 20000);
+
+  // ---------- Aviso de estado del sistema (banner arriba, si algo no esta operativo) ----------
+  async function revisarEstadoSistema() {
+    try {
+      const respuesta = await fetch('/api/estado');
+      const datos = await respuesta.json();
+      const caidos = [];
+      if (!datos.chat) caidos.push('el servidor');
+      if (!datos.baseDatos) caidos.push('la base de datos');
+      if (!datos.ia) caidos.push('la inteligencia artificial');
+
+      const banner = document.getElementById('banner-estado-sistema');
+      const texto = document.getElementById('texto-banner-estado');
+      if (caidos.length > 0) {
+        texto.textContent = `Actualmente hay un problema con: ${caidos.join(', ')}`;
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    } catch (err) {
+      // Si ni siquiera se pudo consultar, no forzamos el banner aqui (el resto del
+      // dashboard ya avisa si no hay conexion al intentar cargar los tickets)
+    }
+  }
+  revisarEstadoSistema();
+  setInterval(revisarEstadoSistema, 60000);
 
   if (usuarioActual && claveActual) {
     cargarTodo();

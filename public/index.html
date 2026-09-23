@@ -632,6 +632,9 @@
     <span>Chat Soporte Tecnico</span>
     <span class="sala-nombre" id="sala-actual-label"></span>
   </div>
+  <div id="banner-estado-sistema" style="display:none; background:#fdeaea; color:#c62828; padding:8px 12px; font-size:12px; text-align:center; font-weight:bold;">
+    ⚠️ <span id="texto-banner-estado"></span>
+  </div>
   <div id="mensajes"></div>
   <div id="escribiendo-indicador"></div>
 
@@ -755,6 +758,31 @@
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
+
+  // ---------- Aviso de estado del sistema (banner arriba, si algo no esta operativo) ----------
+  async function revisarEstadoSistema() {
+    try {
+      const respuesta = await fetch('/api/estado');
+      const datos = await respuesta.json();
+      const caidos = [];
+      if (!datos.chat) caidos.push('el servidor');
+      if (!datos.baseDatos) caidos.push('la base de datos');
+      if (!datos.ia) caidos.push('la inteligencia artificial');
+
+      const banner = document.getElementById('banner-estado-sistema');
+      const texto = document.getElementById('texto-banner-estado');
+      if (caidos.length > 0) {
+        texto.textContent = `Actualmente hay un problema con: ${caidos.join(', ')}`;
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    } catch (err) {
+      // Si no se pudo ni consultar, no forzamos el banner (probablemente sin internet)
+    }
+  }
+  revisarEstadoSistema();
+  setInterval(revisarEstadoSistema, 60000);
 
   function esNombreDeTecnico(nombre) {
     const normalizado = nombre.trim().toLowerCase();
