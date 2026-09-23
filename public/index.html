@@ -650,10 +650,6 @@
   <div id="panel-ver-sugerencias"></div>
   <div id="opciones-panel"></div>
 
-  <button type="button" id="btn-emergencia" style="display:none; width:calc(100% - 16px); margin:6px 8px; background:#c62828; color:white; border:none; border-radius:8px; padding:10px; font-size:13px; font-weight:bold; cursor:pointer; text-align:left;">
-    🚨 Afecta a un paciente <span style="font-weight:normal; font-size:11px; display:block;">Prioridad crítica, sin preguntas</span>
-  </button>
-
   <form id="form-mensaje">
     <button type="button" class="btn-circular" id="btn-opciones" title="Más opciones" style="display:none;">☰</button>
     <button type="button" class="btn-circular" id="btn-emoji" title="Emojis">😊</button>
@@ -714,22 +710,6 @@
   const formMensaje = document.getElementById('form-mensaje');
   const inputMensaje = document.getElementById('input-mensaje');
   const escribiendoIndicador = document.getElementById('escribiendo-indicador');
-
-  // ---------- Boton fijo de emergencia: crea un ticket critico al instante, sin preguntas ----------
-  document.getElementById('btn-emergencia').addEventListener('click', () => {
-    const confirmado = window.confirm('¿Confirmas que la situación afecta a un paciente? Se va a crear un caso con prioridad crítica de inmediato.');
-    if (!confirmado) return;
-
-    socket.emit('crear-ticket', {
-      nombre: miNombre,
-      sala: miSala,
-      categoria: '🚨 Emergencia',
-      descripcion: 'Emergencia: situación que afecta a un paciente.',
-      escalar: true,
-      prioridad: 'Urgente',
-      tipoServicio: 'Incidente'
-    });
-  });
 
   const salaActualLabel = document.getElementById('sala-actual-label');
   const btnMenu = document.getElementById('btn-menu');
@@ -1017,8 +997,6 @@
     const preguntas = preguntasPorSala[sala];
     const esSoporteTecnico = (sala === 'Soporte Tecnico');
     const opciones = [];
-
-    document.getElementById('btn-emergencia').style.display = esSoporteTecnico ? 'block' : 'none';
 
     if (esSoporteTecnico) {
       opciones.push({ icono: '🎫', texto: 'Crear ticket', accion: () => abrirPanel(ticketPanel, () => construirPanelTicket(false)) });
