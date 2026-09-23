@@ -343,12 +343,13 @@ function puedeVerReportes(nombre) {
   return AUTORIZADOS_REPORTES.some((autorizado) => normalizarTexto(autorizado) === normalizado);
 }
 
-// Estado del sistema (publico, sin necesidad de iniciar sesion) - usado por /estado.html
-app.get('/api/estado', async (req, res) => {
+// Revisa el estado real de los 3 servicios. Reutilizada por /api/estado y por
+// la revision periodica que envia alertas por correo.
+async function obtenerEstadoCompleto() {
   const baseDatosOperativa = mongoose.connection.readyState === 1;
 
   // Revisamos la IA en vivo solo si no se ha probado en los ultimos 5 minutos,
-  // para no gastar cuota de la API cada vez que alguien visita la pagina de estado.
+  // para no gastar cuota de la API en cada revision.
   const cincoMinutos = 5 * 60 * 1000;
   const necesitaRevisionIA = !estadoIA.fecha || (Date.now() - estadoIA.fecha.getTime()) > cincoMinutos;
 
@@ -368,12 +369,13 @@ app.get('/api/estado', async (req, res) => {
     }
   }
 
-  res.json({
-    chat: true, // si este endpoint respondio, el servidor esta operativo
-    baseDatos: baseDatosOperativa,
-    ia: estadoIA.operativo,
-    ultimaRevisionIA: estadoIA.fecha
-  });
+  return { chat: true, baseDatos: baseDatosOperativa, ia: estadoIA.operativo, ultimaRevisionIA: estadoIA.fecha };
+}
+
+// Estado del sistema (publico, sin necesidad de iniciar sesion) - usado por /estado.html
+app.get('/api/estado', async (req, res) => {
+  const estado = await obtenerEstadoCompleto();
+  res.json(estado);
 });
 
 // Devuelve la lista completa de tecnicos autorizados, la tengan o no asignados ya
@@ -401,6 +403,71 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 // Guarda el ultimo resultado conocido de la IA, para la pagina de estado del sistema
 // (evita golpear la API de Groq en cada revision; se refresca solo cada 5 minutos)
 let estadoIA = { operativo: null, fecha: null };
+
+// ---------- Alertas por correo cuando un servicio deja de funcionar ----------
+// Se configura con variables de entorno en Render:
+//   EMAIL_USUARIO  -> la cuenta de Gmail que envia el correo (necesita una "clave de aplicacion", no la clave normal)
+//   EMAIL_CLAVE    -> esa clave de aplicacion de 16 caracteres
+//   EMAIL_DESTINO  -> a quien le llega la alerta (puede ser varias, separadas por coma)
+// Si estas variables no estan configuradas, esta funcion simplemente no hace nada.
+const nodemailer = require('nodemailer');
+
+const EMAIL_USUARIO = process.env.EMAIL_USUARIO;
+const EMAIL_CLAVE = process.env.EMAIL_CLAVE;
+const EMAIL_DESTINO = process.env.EMAIL_DESTINO || EMAIL_USUARIO;
+
+let transportadorCorreo = null;
+if (EMAIL_USUARIO && EMAIL_CLAVE) {
+  transportadorCorreo = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: EMAIL_USUARIO, pass: EMAIL_CLAVE }
+  });
+}
+
+async function enviarCorreoAlerta(asunto, mensaje) {
+  if (!transportadorCorreo) return;
+  try {
+    await transportadorCorreo.sendMail({
+      from: `"Estado del Sistema - Soporte Tecnico" <${EMAIL_USUARIO}>`,
+      to: EMAIL_DESTINO,
+      subject: asunto,
+      text: mensaje
+    });
+    console.log('Correo de alerta enviado:', asunto);
+  } catch (err) {
+    console.error('Error enviando correo de alerta:', err.message);
+  }
+}
+
+// Guarda el ultimo estado conocido de cada servicio, para avisar solo cuando CAMBIA
+// (de operativo a caido, o de caido a recuperado), no cada vez que se revisa.
+let ultimoEstadoConocido = { chat: true, baseDatos: true, ia: true };
+const NOMBRES_SERVICIOS = { chat: 'el servidor', baseDatos: 'la base de datos', ia: 'la inteligencia artificial' };
+
+async function revisarYAlertarPorCorreo() {
+  if (!transportadorCorreo) return; // no configurado, no hacemos nada
+
+  const estadoActual = await obtenerEstadoCompleto();
+
+  for (const clave of ['chat', 'baseDatos', 'ia']) {
+    const antes = ultimoEstadoConocido[clave];
+    const ahora = estadoActual[clave];
+
+    if (antes !== false && ahora === false) {
+      await enviarCorreoAlerta(
+        `⚠️ Alerta: ${NOMBRES_SERVICIOS[clave]} no está disponible`,
+        `Se detectó que ${NOMBRES_SERVICIOS[clave]} dejó de responder correctamente en el sistema de soporte técnico.\n\nFecha: ${new Date().toLocaleString('es-CO')}\n\nRevisa https://chat-app-kc6g.onrender.com/estado.html para más detalle.`
+      );
+    } else if (antes === false && ahora === true) {
+      await enviarCorreoAlerta(
+        `✅ Recuperado: ${NOMBRES_SERVICIOS[clave]} volvió a funcionar`,
+        `${NOMBRES_SERVICIOS[clave]} volvió a estar operativo con normalidad.\n\nFecha: ${new Date().toLocaleString('es-CO')}`
+      );
+    }
+  }
+
+  ultimoEstadoConocido = { chat: estadoActual.chat, baseDatos: estadoActual.baseDatos, ia: estadoActual.ia };
+}
 
 async function preguntarIA(pregunta) {
   if (!GROQ_API_KEY) return null;
@@ -586,6 +653,10 @@ mongoose.connection.once('open', async () => {
 
   // Revisa cada minuto si hay tickets sin tomar que ya cumplieron el tiempo de espera
   setInterval(asignarTicketsAutomaticamente, 60 * 1000);
+
+  // Revisa cada 5 minutos el estado de los servicios, y manda un correo si algo
+  // cambia (se cae, o se recupera). Si no hay correo configurado, no hace nada.
+  setInterval(revisarYAlertarPorCorreo, 5 * 60 * 1000);
 
   try {
     const aprendidos = await Conocimiento.find({});
