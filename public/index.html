@@ -679,13 +679,13 @@
   const btnNoAceptoDatos = document.getElementById('btn-no-acepto-datos');
   const mensajeNoAcepto = document.getElementById('mensaje-no-acepto');
 
-  if (localStorage.getItem('consentimientoDatosAceptado') === 'true') {
+  if (sessionStorage.getItem('consentimientoDatosAceptado') === 'true') {
     loginConsentimiento.style.display = 'none';
     loginNormalDiv.style.display = 'block';
   }
 
   btnAceptoDatos.addEventListener('click', () => {
-    localStorage.setItem('consentimientoDatosAceptado', 'true');
+    sessionStorage.setItem('consentimientoDatosAceptado', 'true');
     loginConsentimiento.style.display = 'none';
     loginNormalDiv.style.display = 'block';
   });
