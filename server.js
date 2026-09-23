@@ -343,6 +343,39 @@ function puedeVerReportes(nombre) {
   return AUTORIZADOS_REPORTES.some((autorizado) => normalizarTexto(autorizado) === normalizado);
 }
 
+// Estado del sistema (publico, sin necesidad de iniciar sesion) - usado por /estado.html
+app.get('/api/estado', async (req, res) => {
+  const baseDatosOperativa = mongoose.connection.readyState === 1;
+
+  // Revisamos la IA en vivo solo si no se ha probado en los ultimos 5 minutos,
+  // para no gastar cuota de la API cada vez que alguien visita la pagina de estado.
+  const cincoMinutos = 5 * 60 * 1000;
+  const necesitaRevisionIA = !estadoIA.fecha || (Date.now() - estadoIA.fecha.getTime()) > cincoMinutos;
+
+  if (!GROQ_API_KEY) {
+    estadoIA = { operativo: false, fecha: new Date() };
+  } else if (necesitaRevisionIA) {
+    try {
+      const respuestaPrueba = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+        body: JSON.stringify({ model: 'openai/gpt-oss-20b', messages: [{ role: 'user', content: 'ping' }], max_tokens: 5 }),
+        signal: AbortSignal.timeout(8000)
+      });
+      estadoIA = { operativo: respuestaPrueba.ok, fecha: new Date() };
+    } catch (err) {
+      estadoIA = { operativo: false, fecha: new Date() };
+    }
+  }
+
+  res.json({
+    chat: true, // si este endpoint respondio, el servidor esta operativo
+    baseDatos: baseDatosOperativa,
+    ia: estadoIA.operativo,
+    ultimaRevisionIA: estadoIA.fecha
+  });
+});
+
 // Devuelve la lista completa de tecnicos autorizados, la tengan o no asignados ya
 app.get('/api/tecnicos', verificarCredencialesDashboard, (req, res) => {
   res.json(TECNICOS_AUTORIZADOS);
@@ -364,6 +397,10 @@ app.get('/api/sugerencias', verificarCredencialesDashboard, async (req, res) => 
 // Funciona siempre, sin depender de que tu PC este prendido.
 // GROQ_API_KEY se configura como variable de entorno en Render.
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+// Guarda el ultimo resultado conocido de la IA, para la pagina de estado del sistema
+// (evita golpear la API de Groq en cada revision; se refresca solo cada 5 minutos)
+let estadoIA = { operativo: null, fecha: null };
 
 async function preguntarIA(pregunta) {
   if (!GROQ_API_KEY) return null;
@@ -397,12 +434,15 @@ REGLAS IMPORTANTES:
     if (!respuesta.ok) {
       const detalle = await respuesta.text().catch(() => '');
       console.error(`Groq respondio con error ${respuesta.status}: ${detalle}`);
+      estadoIA = { operativo: false, fecha: new Date() };
       return null;
     }
     const datos = await respuesta.json();
+    estadoIA = { operativo: true, fecha: new Date() };
     return datos.choices && datos.choices[0] ? datos.choices[0].message.content.trim() : null;
   } catch (err) {
     console.error('Error consultando la IA (Groq):', err.message);
+    estadoIA = { operativo: false, fecha: new Date() };
     return null;
   }
 }

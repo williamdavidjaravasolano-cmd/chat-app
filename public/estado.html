@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estado del Sistema — Soporte Técnico</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f4f4f4;
+    color: #222;
+    display: flex;
+    justify-content: center;
+    padding: 30px 16px;
+  }
+  .contenedor { width: 100%; max-width: 480px; }
+  header { text-align: center; margin-bottom: 20px; }
+  header h1 { color: #0B4F6C; font-size: 22px; margin-bottom: 4px; }
+  header p { color: #777; font-size: 13px; margin: 0; }
+
+  .resumen {
+    background: white;
+    border-radius: 10px;
+    padding: 18px;
+    text-align: center;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .resumen .icono { font-size: 34px; margin-bottom: 6px; }
+  .resumen .titulo { font-size: 16px; font-weight: bold; }
+
+  .servicio {
+    background: white;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .servicio .nombre { font-size: 14px; font-weight: bold; }
+  .servicio .descripcion { font-size: 12px; color: #888; margin-top: 2px; }
+  .estado-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 5px 10px;
+    border-radius: 14px;
+  }
+  .punto { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .operativo { background: #e6f6ec; color: #1e8e4e; }
+  .operativo .punto { background: #1e8e4e; }
+  .caido { background: #fdeaea; color: #c62828; }
+  .caido .punto { background: #c62828; }
+  .revisando { background: #f0f0f0; color: #888; }
+  .revisando .punto { background: #aaa; }
+
+  footer { text-align: center; margin-top: 18px; font-size: 12px; color: #999; }
+  #btn-actualizar {
+    display: block;
+    margin: 16px auto 0;
+    background: #0B4F6C;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="contenedor">
+  <header>
+    <h1>📡 Estado del Sistema</h1>
+    <p>Chat y Dashboard de Soporte Técnico</p>
+  </header>
+
+  <div class="resumen" id="resumen">
+    <div class="icono">⏳</div>
+    <div class="titulo">Revisando...</div>
+  </div>
+
+  <div class="servicio">
+    <div>
+      <div class="nombre">💬 Chat / Servidor</div>
+      <div class="descripcion">El servidor que atiende el chat y el dashboard</div>
+    </div>
+    <span class="estado-badge revisando" id="badge-chat"><span class="punto"></span>Revisando</span>
+  </div>
+
+  <div class="servicio">
+    <div>
+      <div class="nombre">🗄️ Base de datos</div>
+      <div class="descripcion">Guarda mensajes, tickets y usuarios</div>
+    </div>
+    <span class="estado-badge revisando" id="badge-basedatos"><span class="punto"></span>Revisando</span>
+  </div>
+
+  <div class="servicio">
+    <div>
+      <div class="nombre">🤖 Inteligencia Artificial</div>
+      <div class="descripcion">Respuestas automáticas cuando el bot no reconoce la pregunta</div>
+    </div>
+    <span class="estado-badge revisando" id="badge-ia"><span class="punto"></span>Revisando</span>
+  </div>
+
+  <button id="btn-actualizar">🔄 Actualizar ahora</button>
+
+  <footer id="pie">Comprobando...</footer>
+</div>
+
+<script>
+  function pintarBadge(id, operativo) {
+    const el = document.getElementById(id);
+    if (operativo === true) {
+      el.className = 'estado-badge operativo';
+      el.innerHTML = '<span class="punto"></span>Operativo';
+    } else if (operativo === false) {
+      el.className = 'estado-badge caido';
+      el.innerHTML = '<span class="punto"></span>No disponible';
+    } else {
+      el.className = 'estado-badge revisando';
+      el.innerHTML = '<span class="punto"></span>Sin datos';
+    }
+  }
+
+  async function revisarEstado() {
+    const resumen = document.getElementById('resumen');
+    const pie = document.getElementById('pie');
+
+    try {
+      const respuesta = await fetch('/api/estado');
+      const datos = await respuesta.json();
+
+      pintarBadge('badge-chat', datos.chat);
+      pintarBadge('badge-basedatos', datos.baseDatos);
+      pintarBadge('badge-ia', datos.ia);
+
+      const todoBien = datos.chat && datos.baseDatos && datos.ia;
+      const algoMal = !datos.chat || !datos.baseDatos || !datos.ia;
+
+      if (todoBien) {
+        resumen.innerHTML = '<div class="icono">✅</div><div class="titulo" style="color:#1e8e4e;">Todo funcionando con normalidad</div>';
+      } else if (algoMal) {
+        resumen.innerHTML = '<div class="icono">⚠️</div><div class="titulo" style="color:#c62828;">Uno o más servicios presentan problemas</div>';
+      }
+
+      const hora = new Date().toLocaleTimeString('es-CO');
+      pie.textContent = `Última revisión: ${hora} (se actualiza solo cada 30 segundos)`;
+    } catch (err) {
+      pintarBadge('badge-chat', false);
+      pintarBadge('badge-basedatos', null);
+      pintarBadge('badge-ia', null);
+      resumen.innerHTML = '<div class="icono">⚠️</div><div class="titulo" style="color:#c62828;">No se pudo conectar con el servidor</div>';
+      pie.textContent = 'No se pudo contactar al servidor. Puede que esté caído o iniciando.';
+    }
+  }
+
+  document.getElementById('btn-actualizar').addEventListener('click', revisarEstado);
+  revisarEstado();
+  setInterval(revisarEstado, 30000);
+</script>
+
+</body>
+</html>
