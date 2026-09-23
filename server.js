@@ -716,14 +716,19 @@ const usuariosPorSala = {};
 // repartiendo la carga entre los tecnicos disponibles (el que tenga menos
 // casos "En proceso" en ese momento).
 const MINUTOS_ESPERA_ASIGNACION_AUTOMATICA = 5;
+const MINUTOS_ESPERA_ASIGNACION_URGENTE = 1; // los casos Urgentes (ej. emergencias) esperan mucho menos
 
 async function asignarTicketsAutomaticamente() {
   try {
-    const limiteFecha = new Date(Date.now() - MINUTOS_ESPERA_ASIGNACION_AUTOMATICA * 60 * 1000);
+    const limiteFechaNormal = new Date(Date.now() - MINUTOS_ESPERA_ASIGNACION_AUTOMATICA * 60 * 1000);
+    const limiteFechaUrgente = new Date(Date.now() - MINUTOS_ESPERA_ASIGNACION_URGENTE * 60 * 1000);
     const ticketsSinTomar = await Ticket.find({
       tecnicoAsignado: null,
       estado: { $ne: 'Resuelto' },
-      fechaCreacion: { $lte: limiteFecha }
+      $or: [
+        { prioridad: 'Urgente', fechaCreacion: { $lte: limiteFechaUrgente } },
+        { prioridad: { $ne: 'Urgente' }, fechaCreacion: { $lte: limiteFechaNormal } }
+      ]
     });
     if (ticketsSinTomar.length === 0) return;
 
@@ -750,11 +755,12 @@ async function asignarTicketsAutomaticamente() {
       await ticket.save();
       activosPorTecnico[elegido] += 1;
 
+      const minutosEspera = ticket.prioridad === 'Urgente' ? MINUTOS_ESPERA_ASIGNACION_URGENTE : MINUTOS_ESPERA_ASIGNACION_AUTOMATICA;
       const salaDelTicket = ticket.sala || SALA_SOPORTE;
       const mensajeAsignado = {
         sala: salaDelTicket,
         nombre: NOMBRE_BOT_SOPORTE,
-        texto: `🤖 Nadie tomó el ticket #${ticket.numero} en ${MINUTOS_ESPERA_ASIGNACION_AUTOMATICA} minutos, así que se asignó automáticamente a ${elegido} (estaba disponible en el chat). ${ticket.nombre}, ya hay un técnico al tanto de tu caso.`,
+        texto: `🤖 Nadie tomó el ticket #${ticket.numero} en ${minutosEspera} minuto(s), así que se asignó automáticamente a ${elegido} (estaba disponible en el chat). ${ticket.nombre}, ya hay un técnico al tanto de tu caso.`,
         tipo: 'texto',
         hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
       };
