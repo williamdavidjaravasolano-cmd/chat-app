@@ -12,6 +12,17 @@ const io = new Server(server, {
   maxHttpBufferSize: 5 * 1024 * 1024
 });
 
+// Evitamos que el navegador (o la app de escritorio) guarden en cache las
+// paginas principales, para que siempre se vea la version mas reciente
+// despues de cada actualizacion, sin depender de que el usuario fuerce un
+// refresco manual.
+app.use((req, res, next) => {
+  if (req.path.endsWith('.html') || req.path === '/') {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  }
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
