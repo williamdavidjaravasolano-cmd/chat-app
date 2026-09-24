@@ -78,6 +78,15 @@
     cursor: pointer;
     font-size: 12px;
   }
+  header button#btn-actualizar-todo {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+  }
 
   .contenedor { padding: 16px; max-width: 1200px; margin: 0 auto; }
 
@@ -275,6 +284,7 @@
     <div class="info-derecha">
       <span id="usuario-conectado"></span>
       <span class="actualizado" id="ultima-actualizacion">Cargando...</span>
+      <button id="btn-actualizar-todo" title="Actualizar toda la plataforma (recarga la página completa)">🔄 Actualizar todo</button>
       <button id="btn-modo-oscuro-dash" title="Modo oscuro">🌙</button>
       <button id="btn-salir">Salir</button>
     </div>
@@ -468,6 +478,10 @@
     } catch (err) {
       errorCambioClaveDash.textContent = 'No se pudo conectar con el servidor.';
     }
+  });
+
+  document.getElementById('btn-actualizar-todo').addEventListener('click', () => {
+    window.location.reload();
   });
 
   document.getElementById('btn-salir').addEventListener('click', () => {
