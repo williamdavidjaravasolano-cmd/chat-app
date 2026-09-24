@@ -711,6 +711,12 @@
   const inputClaveNuevaConfirmar = document.getElementById('input-clave-nueva-confirmar');
   const errorCambioClave = document.getElementById('error-cambio-clave');
   const btnGuardarClaveNueva = document.getElementById('btn-guardar-clave-nueva');
+  document.getElementById('login-cambio-clave').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !btnGuardarClaveNueva.disabled) {
+      e.preventDefault();
+      btnGuardarClaveNueva.click();
+    }
+  });
   const camposSoporte = document.getElementById('campos-soporte');
   const inputArea = document.getElementById('input-area');
   const inputCargo = document.getElementById('input-cargo');
@@ -940,6 +946,15 @@
   });
 
   btnEntrar.addEventListener('click', entrarAlChat);
+
+  // Permite presionar Enter en cualquier campo del formulario de login para entrar,
+  // igual que si se hiciera click en el boton "Entrar"
+  document.getElementById('login-normal').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !btnEntrar.disabled) {
+      e.preventDefault();
+      entrarAlChat();
+    }
+  });
   inputNombre.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') entrarAlChat();
   });
