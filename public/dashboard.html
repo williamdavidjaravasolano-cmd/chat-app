@@ -222,6 +222,7 @@
   body.modo-oscuro .tarjeta,
   body.modo-oscuro #grafico-resumen > div,
   body.modo-oscuro #panel-estado-sistema,
+  body.modo-oscuro #panel-tecnicos-en-linea-dash,
   body.modo-oscuro #calificacion-tecnicos > div,
   body.modo-oscuro .filtros,
   body.modo-oscuro table,
@@ -286,6 +287,11 @@
         <a href="/estado.html" target="_blank" style="font-size:11px; color:#0B4F6C;">Ver página completa ↗</a>
       </div>
       <div id="lista-estado-servicios" style="display:flex; gap:10px; flex-wrap:wrap;"></div>
+    </div>
+
+    <div id="panel-tecnicos-en-linea-dash" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:8px;">🟢 Técnicos en línea</div>
+      <div id="lista-tecnicos-en-linea-dash" style="font-size:13px;"></div>
     </div>
 
     <div id="grafico-resumen"></div>
@@ -1027,6 +1033,24 @@
   }
   revisarEstadoSistema();
   setInterval(revisarEstadoSistema, 60000);
+
+  // ---------- Tecnicos en linea (tarjeta fija en el dashboard) ----------
+  async function revisarTecnicosEnLineaDash() {
+    const contenedor = document.getElementById('lista-tecnicos-en-linea-dash');
+    try {
+      const respuesta = await fetch('/api/tecnicos-en-linea', { headers: cabecerasAuth() });
+      const tecnicos = await respuesta.json();
+      if (!Array.isArray(tecnicos) || tecnicos.length === 0) {
+        contenedor.innerHTML = '<span style="color:#888;">Nadie conectado en este momento.</span>';
+      } else {
+        contenedor.innerHTML = tecnicos.map((t) => `<span style="color:#1e8e4e; font-weight:bold;">●</span> ${escaparHTML(t)}`).join('&nbsp;&nbsp;&nbsp;');
+      }
+    } catch (err) {
+      contenedor.innerHTML = '<span style="color:#888;">No se pudo consultar.</span>';
+    }
+  }
+  revisarTecnicosEnLineaDash();
+  setInterval(revisarTecnicosEnLineaDash, 30000);
 
   if (usuarioActual && claveActual) {
     cargarTodo();

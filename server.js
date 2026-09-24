@@ -410,6 +410,15 @@ app.get('/api/tecnicos', verificarCredencialesDashboard, (req, res) => {
   res.json(TECNICOS_AUTORIZADOS);
 });
 
+// Devuelve solo los tecnicos que estan conectados al chat en este momento
+app.get('/api/tecnicos-en-linea', verificarCredencialesDashboard, (req, res) => {
+  const conectados = Object.values(usuariosPorSala[SALA_SOPORTE] || {});
+  const tecnicosEnLinea = TECNICOS_AUTORIZADOS.filter((tecnico) =>
+    conectados.some((nombreConectado) => normalizarTexto(nombreConectado) === normalizarTexto(tecnico))
+  );
+  res.json(tecnicosEnLinea);
+});
+
 // Devuelve las sugerencias del buzon (para calcular calificaciones en el dashboard)
 app.get('/api/sugerencias', verificarCredencialesDashboard, async (req, res) => {
   try {
