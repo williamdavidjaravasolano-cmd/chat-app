@@ -520,7 +520,61 @@ REGLAS IMPORTANTES:
   }
 }
 
-// ---------- Base de conocimiento aprendida de tickets resueltos ----------
+// Le pide a la IA que determine la prioridad de un ticket segun su descripcion,
+// para que no dependa de que el usuario elija (y que todos escojan "Urgente").
+// Devuelve siempre un valor valido (Baja/Media/Alta/Urgente); si la IA falla,
+// usa "Media" por defecto para no bloquear la creacion del ticket.
+async function clasificarPrioridadConIA(descripcion, categoria, tipoServicio) {
+  const PRIORIDAD_POR_DEFECTO = 'Media';
+  if (!GROQ_API_KEY) return PRIORIDAD_POR_DEFECTO;
+
+  try {
+    const respuesta = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'openai/gpt-oss-20b',
+        messages: [
+          {
+            role: 'system',
+            content: `Eres un clasificador de prioridad para un sistema de soporte técnico de un hospital. Vas a recibir la categoría, el tipo de servicio, y la descripción de un caso. Responde con UNA SOLA PALABRA, exactamente una de estas cuatro: Baja, Media, Alta, Urgente. No agregues explicación ni puntuación.
+
+Guía para clasificar:
+- Urgente: la situación afecta directamente la atención de un paciente, o deja totalmente inoperativo un servicio crítico (ej: no se puede registrar una urgencia, un equipo médico conectado no funciona, toda un área sin ningún sistema).
+- Alta: afecta el trabajo de forma importante pero no pone en riesgo a un paciente de forma inmediata (ej: un sistema clave lento o con errores, pero se puede seguir operando con dificultad).
+- Media: una molestia que no impide seguir trabajando (ej: impresora no imprime, un programa se congela ocasionalmente).
+- Baja: algo cosmético, una duda, o algo que puede esperar sin afectar el trabajo diario.
+
+Si la descripción es ambigua o muy corta, usa Media.`
+          },
+          {
+            role: 'user',
+            content: `Categoría: ${categoria || 'N/A'}\nTipo de servicio: ${tipoServicio || 'N/A'}\nDescripción: ${descripcion}`
+          }
+        ],
+        max_tokens: 5,
+        temperature: 0
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (!respuesta.ok) return PRIORIDAD_POR_DEFECTO;
+
+    const datos = await respuesta.json();
+    const texto = datos.choices && datos.choices[0] ? datos.choices[0].message.content.trim() : '';
+    const limpio = texto.replace(/[^a-zA-ZÁÉÍÓÚáéíóú]/g, '');
+    const opcionesValidas = ['Baja', 'Media', 'Alta', 'Urgente'];
+    const encontrada = opcionesValidas.find((opcion) => normalizarTexto(opcion) === normalizarTexto(limpio));
+    return encontrada || PRIORIDAD_POR_DEFECTO;
+  } catch (err) {
+    console.error('Error clasificando la prioridad con IA:', err.message);
+    return PRIORIDAD_POR_DEFECTO;
+  }
+}
+
 // Cada vez que se resuelve un ticket con el comando /resolver, se guarda aqui
 // para que quede disponible aunque el servidor se reinicie.
 const conocimientoSchema = new mongoose.Schema({
@@ -733,7 +787,7 @@ async function asignarTicketsAutomaticamente() {
   try {
     const limiteFechaNormal = new Date(Date.now() - MINUTOS_ESPERA_ASIGNACION_AUTOMATICA * 60 * 1000);
     const limiteFechaUrgente = new Date(Date.now() - MINUTOS_ESPERA_ASIGNACION_URGENTE * 60 * 1000);
-    const ticketsSinTomar = await Ticket.find({
+    let ticketsSinTomar = await Ticket.find({
       tecnicoAsignado: null,
       estado: { $ne: 'Resuelto' },
       $or: [
@@ -742,6 +796,15 @@ async function asignarTicketsAutomaticamente() {
       ]
     });
     if (ticketsSinTomar.length === 0) return;
+
+    // Se asignan "en orden": primero los mas urgentes, y entre casos de la misma
+    // prioridad, primero el que lleva mas tiempo esperando.
+    const ORDEN_PRIORIDAD = { Urgente: 0, Alta: 1, Media: 2, Baja: 3 };
+    ticketsSinTomar = ticketsSinTomar.sort((a, b) => {
+      const diferenciaPrioridad = (ORDEN_PRIORIDAD[a.prioridad] ?? 2) - (ORDEN_PRIORIDAD[b.prioridad] ?? 2);
+      if (diferenciaPrioridad !== 0) return diferenciaPrioridad;
+      return new Date(a.fechaCreacion) - new Date(b.fechaCreacion);
+    });
 
     const conectados = Object.values(usuariosPorSala[SALA_SOPORTE] || {});
     const tecnicosDisponibles = TECNICOS_AUTORIZADOS.filter((tecnico) =>
@@ -1269,12 +1332,14 @@ io.on('connection', (socket) => {
   // El usuario crea un ticket nuevo (categoria + descripcion del problema)
   // Si "escalar" es true, el usuario pidio hablar directo con un tecnico,
   // sin que el bot intente responder automaticamente con el FAQ.
-  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion, escalar, prioridad, imagenAdjunta, tipoServicio }) => {
+  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion, escalar, imagenAdjunta, tipoServicio }) => {
     try {
       const numero = await generarNumeroTicket();
       const historial = [{ estado: 'Creado' }];
-      const prioridadFinal = ['Baja', 'Media', 'Alta', 'Urgente'].includes(prioridad) ? prioridad : 'Media';
       const tipoServicioFinal = ['Incidente', 'Requerimiento'].includes(tipoServicio) ? tipoServicio : 'Incidente';
+      // La prioridad ya no la elige el usuario (para evitar que todos pongan "Urgente"):
+      // la determina la IA segun la descripcion, la categoria y el tipo de servicio.
+      const prioridadFinal = await clasificarPrioridadConIA(descripcion, categoria, tipoServicioFinal);
 
       // Si la descripcion coincide con una pregunta frecuente, damos una respuesta rapida
       // (a menos que el usuario haya pedido escalar directo a un tecnico)
@@ -1406,6 +1471,15 @@ io.on('connection', (socket) => {
       console.error('Error obteniendo sugerencias:', err.message);
       socket.emit('lista-sugerencias', []);
     }
+  });
+
+  // Cualquier usuario puede ver que tecnicos estan conectados al chat en este momento
+  socket.on('obtener-tecnicos-en-linea', () => {
+    const conectados = Object.values(usuariosPorSala[SALA_SOPORTE] || {});
+    const tecnicosEnLinea = TECNICOS_AUTORIZADOS.filter((tecnico) =>
+      conectados.some((nombreConectado) => normalizarTexto(nombreConectado) === normalizarTexto(tecnico))
+    );
+    socket.emit('lista-tecnicos-en-linea', tecnicosEnLinea);
   });
 
   socket.on('obtener-tickets', async ({ nombre }) => {

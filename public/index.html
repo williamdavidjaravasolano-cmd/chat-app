@@ -222,7 +222,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias, #panel-tecnicos-en-linea {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -546,6 +546,7 @@
   body.modo-oscuro #panel-conversacion-ticket,
   body.modo-oscuro #panel-enviar-sugerencia,
   body.modo-oscuro #panel-ver-sugerencias,
+  body.modo-oscuro #panel-tecnicos-en-linea,
   body.modo-oscuro #opciones-panel {
     background: #1e1e1e;
     color: #e6e6e6;
@@ -648,6 +649,7 @@
   <div id="panel-conversacion-ticket"></div>
   <div id="panel-enviar-sugerencia"></div>
   <div id="panel-ver-sugerencias"></div>
+  <div id="panel-tecnicos-en-linea"></div>
   <div id="opciones-panel"></div>
 
   <form id="form-mensaje">
@@ -722,6 +724,7 @@
   const panelConversacionTicket = document.getElementById('panel-conversacion-ticket');
   const panelEnviarSugerencia = document.getElementById('panel-enviar-sugerencia');
   const panelVerSugerencias = document.getElementById('panel-ver-sugerencias');
+  const panelTecnicosEnLinea = document.getElementById('panel-tecnicos-en-linea');
 
   // Debe coincidir con la lista TECNICOS_AUTORIZADOS de server.js
   const EQUIPO_TECNICO = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Julian', 'Yin Carlos', 'William David', 'Henrry', 'Hector', 'Kevin Daniel'];
@@ -948,7 +951,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias, panelTecnicosEnLinea].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -1002,6 +1005,7 @@
       opciones.push({ icono: '🎫', texto: 'Crear ticket', accion: () => abrirPanel(ticketPanel, () => construirPanelTicket(false)) });
       opciones.push({ icono: '📋', texto: 'Mis tickets', accion: () => abrirPanel(ticketsPanel, () => socket.emit('obtener-tickets', { nombre: miNombre })) });
       opciones.push({ icono: '💡', texto: 'Buzón de sugerencias', accion: () => abrirPanel(panelEnviarSugerencia, construirFormularioSugerencia) });
+      opciones.push({ icono: '🟢', texto: 'Técnicos en línea', accion: () => abrirPanel(panelTecnicosEnLinea, () => socket.emit('obtener-tecnicos-en-linea')) });
     }
 
     if (esSoporteTecnico && esTecnicoActual()) {
@@ -1194,26 +1198,12 @@
     ticketPanel.appendChild(selectTipoServicio);
 
     // ---- Prioridad ----
-    const etiquetaPrioridad = document.createElement('div');
-    etiquetaPrioridad.textContent = '¿Qué tan urgente es?';
-    etiquetaPrioridad.style.cssText = 'font-size:13px; color:#555; margin-top:8px;';
-    ticketPanel.appendChild(etiquetaPrioridad);
-
-    const selectPrioridad = document.createElement('select');
-    selectPrioridad.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin:6px 0;';
-    [
-      { valor: 'Baja', texto: '🟢 Baja — puede esperar' },
-      { valor: 'Media', texto: '🟡 Media — normal' },
-      { valor: 'Alta', texto: '🟠 Alta — me está afectando el trabajo' },
-      { valor: 'Urgente', texto: '🔴 Urgente — no puedo trabajar' }
-    ].forEach(({ valor, texto }) => {
-      const opcion = document.createElement('option');
-      opcion.value = valor;
-      opcion.textContent = texto;
-      if (valor === 'Media') opcion.selected = true;
-      selectPrioridad.appendChild(opcion);
-    });
-    ticketPanel.appendChild(selectPrioridad);
+    // Ya no la elige el usuario: el sistema la determina automaticamente
+    // (con IA) segun la descripcion, para que no todos escojan "Urgente".
+    const notaPrioridad = document.createElement('div');
+    notaPrioridad.textContent = 'ℹ️ La prioridad se asigna automáticamente según tu descripción.';
+    notaPrioridad.style.cssText = 'font-size:12px; color:#888; margin-top:8px; font-style:italic;';
+    ticketPanel.appendChild(notaPrioridad);
 
     // ---- Adjuntar captura de pantalla (opcional) ----
     let imagenAdjuntaBase64 = null;
@@ -1322,7 +1312,6 @@
         categoria,
         descripcion,
         escalar: !!escalar,
-        prioridad: selectPrioridad.value,
         tipoServicio: selectTipoServicio.value,
         imagenAdjunta: imagenAdjuntaBase64
       });
@@ -2058,6 +2047,36 @@
 
   socket.on('lista-sugerencias', (sugerencias) => {
     construirPanelVerSugerencias(sugerencias);
+  });
+
+  // ---------- Tecnicos en linea ----------
+  function construirPanelTecnicosEnLinea(tecnicos) {
+    panelTecnicosEnLinea.innerHTML = '';
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = '🟢 Técnicos en línea ahora mismo';
+    panelTecnicosEnLinea.appendChild(titulo);
+
+    if (tecnicos.length === 0) {
+      const vacio = document.createElement('div');
+      vacio.classList.add('faq-titulo');
+      vacio.textContent = 'No hay ningún técnico conectado en este momento.';
+      panelTecnicosEnLinea.appendChild(vacio);
+    } else {
+      tecnicos.forEach((tecnico) => {
+        const item = document.createElement('div');
+        item.classList.add('item-ticket');
+        item.innerHTML = `<span style="color:#4caf50;">●</span> ${escaparHTML(tecnico)}`;
+        panelTecnicosEnLinea.appendChild(item);
+      });
+    }
+
+    agregarBotonVolver(panelTecnicosEnLinea);
+  }
+
+  socket.on('lista-tecnicos-en-linea', (tecnicos) => {
+    construirPanelTecnicosEnLinea(tecnicos);
   });
 
   function construirPanelReportes(metricas) {
