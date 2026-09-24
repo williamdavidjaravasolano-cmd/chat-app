@@ -338,9 +338,25 @@ function formatoDatosTicket({ area, nombre, cargo, extension, incidencia }) {
 }
 
 // ---------- Tecnicos autorizados ----------
-// Solo estos nombres (tal como los escriben al entrar al chat) pueden usar
-// los comandos /tomar, /resolver y /aprobar. Agrega o quita nombres aqui.
-const TECNICOS_AUTORIZADOS = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Yin Carlos', 'William David', 'Henrry', 'Hector', 'Kevin Daniel'];
+// Este es el valor inicial (por si la base de datos esta vacia la primera vez).
+// A partir de que el servidor arranca, esta lista se sincroniza con la coleccion
+// "Tecnico" de la base de datos, y se puede administrar sin tocar el codigo desde
+// el panel "Administrar tecnicos" (menu ☰, solo Hector y William David).
+let TECNICOS_AUTORIZADOS = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Yin Carlos', 'William David', 'Henrry', 'Hector', 'Kevin Daniel'];
+
+// Recarga TECNICOS_AUTORIZADOS desde la base de datos. Usamos splice (no una
+// reasignacion) para que el mismo arreglo en memoria se actualice, y todo el
+// codigo que ya lo referencia (TECNICOS_AUTORIZADOS.some/.find/.filter, etc.)
+// vea siempre la version mas reciente sin necesidad de cambiar cada referencia.
+async function sincronizarListaTecnicos() {
+  try {
+    const registros = await Tecnico.find({}).sort({ nombre: 1 });
+    const nombres = registros.map((r) => r.nombre);
+    TECNICOS_AUTORIZADOS.splice(0, TECNICOS_AUTORIZADOS.length, ...nombres);
+  } catch (err) {
+    console.error('Error sincronizando la lista de tecnicos:', err.message);
+  }
+}
 
 function esTecnicoAutorizado(nombre) {
   const normalizado = normalizarTexto(nombre || '');
@@ -746,6 +762,10 @@ mongoose.connection.once('open', async () => {
   } catch (err) {
     console.error('Error creando los registros iniciales de tecnicos:', err.message);
   }
+
+  // A partir de aqui, la base de datos es la fuente de la verdad: la lista de
+  // tecnicos autorizados se toma de la coleccion Tecnico, no del arreglo fijo.
+  await sincronizarListaTecnicos();
 });
 
 // ---------- Saludo automatico tipo mesa de ayuda (todas las salas) ----------
@@ -1470,6 +1490,62 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Error obteniendo sugerencias:', err.message);
       socket.emit('lista-sugerencias', []);
+    }
+  });
+
+  // Cualquier usuario puede pedir la lista de nombres de tecnicos (sin contraseñas),
+  // para que el chat sepa a quien pedirle clave al iniciar sesion, y para el buzon
+  // de sugerencias -- se mantiene sincronizada con la base de datos automaticamente.
+  socket.on('obtener-lista-tecnicos', () => {
+    socket.emit('lista-tecnicos-publica', TECNICOS_AUTORIZADOS);
+  });
+
+  // ---------- Administrar tecnicos (agregar/quitar), solo Hector y William David ----------
+  socket.on('obtener-tecnicos-administrar', async () => {
+    if (!puedeVerReportes(nombreActual)) {
+      socket.emit('lista-tecnicos-administrar', null);
+      return;
+    }
+    try {
+      const registros = await Tecnico.find({}).sort({ nombre: 1 });
+      socket.emit('lista-tecnicos-administrar', registros.map((r) => ({ nombre: r.nombre, claveCambiada: r.claveCambiada })));
+    } catch (err) {
+      console.error('Error obteniendo tecnicos para administrar:', err.message);
+      socket.emit('lista-tecnicos-administrar', []);
+    }
+  });
+
+  socket.on('agregar-tecnico', async ({ nombre }) => {
+    if (!puedeVerReportes(nombreActual)) return;
+    const nombreLimpio = (nombre || '').trim();
+    if (!nombreLimpio) {
+      socket.emit('resultado-administrar-tecnico', { ok: false, error: 'Escribe un nombre.' });
+      return;
+    }
+    try {
+      const existente = await Tecnico.findOne({ nombre: nombreLimpio });
+      if (existente) {
+        socket.emit('resultado-administrar-tecnico', { ok: false, error: 'Ya existe un técnico con ese nombre.' });
+        return;
+      }
+      await new Tecnico({ nombre: nombreLimpio, clave: CLAVE_GENERICA_INICIAL, claveCambiada: false }).save();
+      await sincronizarListaTecnicos();
+      socket.emit('resultado-administrar-tecnico', { ok: true, mensaje: `${nombreLimpio} fue agregado. Su contraseña inicial es: ${CLAVE_GENERICA_INICIAL}` });
+    } catch (err) {
+      console.error('Error agregando tecnico:', err.message);
+      socket.emit('resultado-administrar-tecnico', { ok: false, error: 'Error del servidor.' });
+    }
+  });
+
+  socket.on('quitar-tecnico', async ({ nombre }) => {
+    if (!puedeVerReportes(nombreActual)) return;
+    try {
+      await Tecnico.deleteOne({ nombre });
+      await sincronizarListaTecnicos();
+      socket.emit('resultado-administrar-tecnico', { ok: true, mensaje: `${nombre} fue quitado de los técnicos autorizados.` });
+    } catch (err) {
+      console.error('Error quitando tecnico:', err.message);
+      socket.emit('resultado-administrar-tecnico', { ok: false, error: 'Error del servidor.' });
     }
   });
 

@@ -222,7 +222,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias, #panel-tecnicos-en-linea {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias, #panel-tecnicos-en-linea, #panel-administrar-tecnicos {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -547,6 +547,7 @@
   body.modo-oscuro #panel-enviar-sugerencia,
   body.modo-oscuro #panel-ver-sugerencias,
   body.modo-oscuro #panel-tecnicos-en-linea,
+  body.modo-oscuro #panel-administrar-tecnicos,
   body.modo-oscuro #opciones-panel {
     background: #1e1e1e;
     color: #e6e6e6;
@@ -650,6 +651,7 @@
   <div id="panel-enviar-sugerencia"></div>
   <div id="panel-ver-sugerencias"></div>
   <div id="panel-tecnicos-en-linea"></div>
+  <div id="panel-administrar-tecnicos"></div>
   <div id="opciones-panel"></div>
 
   <form id="form-mensaje">
@@ -725,9 +727,18 @@
   const panelEnviarSugerencia = document.getElementById('panel-enviar-sugerencia');
   const panelVerSugerencias = document.getElementById('panel-ver-sugerencias');
   const panelTecnicosEnLinea = document.getElementById('panel-tecnicos-en-linea');
+  const panelAdministrarTecnicos = document.getElementById('panel-administrar-tecnicos');
 
-  // Debe coincidir con la lista TECNICOS_AUTORIZADOS de server.js
+  // Valor inicial (por si tarda en llegar la respuesta del servidor); se
+  // actualiza solo apenas se conecta, y sigue actualizada si un administrador
+  // agrega o quita un tecnico despues (sin necesidad de recargar la pagina).
   const EQUIPO_TECNICO = ['Juan Diego', 'Juan Pablo', 'Juan Jose', 'Yin Carlos', 'William David', 'Henrry', 'Hector', 'Kevin Daniel'];
+  socket.emit('obtener-lista-tecnicos');
+  socket.on('lista-tecnicos-publica', (lista) => {
+    EQUIPO_TECNICO.length = 0;
+    EQUIPO_TECNICO.push(...lista);
+  });
+
   const AUTORIZADOS_REPORTES = ['Hector', 'William David'];
   function esTecnicoActual() {
     const normalizado = miNombre.trim().toLowerCase();
@@ -951,7 +962,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias, panelTecnicosEnLinea].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias, panelTecnicosEnLinea, panelAdministrarTecnicos].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -1016,6 +1027,7 @@
     if (esSoporteTecnico && puedeVerReportes()) {
       opciones.push({ icono: '📊', texto: 'Reportes', accion: () => abrirPanel(panelReportes, () => socket.emit('obtener-metricas', { nombre: miNombre })) });
       opciones.push({ icono: '📬', texto: 'Sugerencias recibidas', accion: () => abrirPanel(panelVerSugerencias, () => socket.emit('obtener-sugerencias')) });
+      opciones.push({ icono: '👤', texto: 'Administrar técnicos', accion: () => abrirPanel(panelAdministrarTecnicos, () => socket.emit('obtener-tecnicos-administrar')) });
     }
 
     if (preguntas) {
@@ -2077,6 +2089,84 @@
 
   socket.on('lista-tecnicos-en-linea', (tecnicos) => {
     construirPanelTecnicosEnLinea(tecnicos);
+  });
+
+  // ---------- Administrar tecnicos (agregar/quitar) ----------
+  function construirPanelAdministrarTecnicos(tecnicos) {
+    panelAdministrarTecnicos.innerHTML = '';
+
+    if (tecnicos === null) {
+      panelAdministrarTecnicos.innerHTML = '<div class="faq-titulo">No tienes autorización para ver esta sección.</div>';
+      agregarBotonVolver(panelAdministrarTecnicos);
+      return;
+    }
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = `👤 Administrar técnicos (${tecnicos.length})`;
+    panelAdministrarTecnicos.appendChild(titulo);
+
+    tecnicos.forEach((tecnico) => {
+      const item = document.createElement('div');
+      item.classList.add('item-ticket');
+      const estadoClave = tecnico.claveCambiada
+        ? '<span style="color:#4caf50; font-size:11px;">✅ Ya cambió su contraseña</span>'
+        : '<span style="color:#ff9800; font-size:11px;">⏳ Aún usa la contraseña genérica</span>';
+      item.innerHTML = `
+        <div class="fila-superior">
+          <strong>${escaparHTML(tecnico.nombre)}</strong>
+        </div>
+        <div class="descripcion-ticket">${estadoClave}</div>
+      `;
+      const botonQuitar = document.createElement('button');
+      botonQuitar.type = 'button';
+      botonQuitar.textContent = '🗑️ Quitar';
+      botonQuitar.style.cssText = 'background:#e53935; color:white; margin-top:6px; padding:6px 10px; font-size:12px; border:none; border-radius:6px; cursor:pointer;';
+      botonQuitar.addEventListener('click', () => {
+        const confirmado = window.confirm(`¿Seguro que quieres quitar a ${tecnico.nombre} de los técnicos autorizados?`);
+        if (!confirmado) return;
+        socket.emit('quitar-tecnico', { nombre: tecnico.nombre });
+      });
+      item.appendChild(botonQuitar);
+      panelAdministrarTecnicos.appendChild(item);
+    });
+
+    const separador = document.createElement('div');
+    separador.style.cssText = 'border-top:1px dashed #ccc; margin:12px 0 8px; padding-top:8px; font-size:13px; color:#555; font-weight:bold;';
+    separador.textContent = 'Agregar un nuevo técnico';
+    panelAdministrarTecnicos.appendChild(separador);
+
+    const inputNuevoTecnico = document.createElement('input');
+    inputNuevoTecnico.type = 'text';
+    inputNuevoTecnico.placeholder = 'Nombre exacto (como lo escribirá al entrar)';
+    inputNuevoTecnico.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-bottom:6px;';
+    panelAdministrarTecnicos.appendChild(inputNuevoTecnico);
+
+    const botonAgregar = document.createElement('button');
+    botonAgregar.type = 'button';
+    botonAgregar.textContent = '➕ Agregar técnico';
+    botonAgregar.classList.add('boton-enviar-ticket');
+    botonAgregar.addEventListener('click', () => {
+      const nombre = inputNuevoTecnico.value.trim();
+      if (!nombre) return;
+      socket.emit('agregar-tecnico', { nombre });
+    });
+    panelAdministrarTecnicos.appendChild(botonAgregar);
+
+    agregarBotonVolver(panelAdministrarTecnicos);
+  }
+
+  socket.on('lista-tecnicos-administrar', (tecnicos) => {
+    construirPanelAdministrarTecnicos(tecnicos);
+  });
+
+  socket.on('resultado-administrar-tecnico', (resultado) => {
+    if (resultado.ok) {
+      alert(resultado.mensaje || 'Listo.');
+      socket.emit('obtener-tecnicos-administrar'); // refresca la lista
+    } else {
+      alert(resultado.error || 'No se pudo completar la acción.');
+    }
   });
 
   function construirPanelReportes(metricas) {
