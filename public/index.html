@@ -261,23 +261,27 @@
   }
   #opciones-panel {
     max-height: 420px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
   }
   #opciones-panel button {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
     text-align: left;
     background: #f0f0f0;
     border: none;
     border-radius: 6px;
-    padding: 7px 10px;
-    margin-bottom: 4px;
+    padding: 6px 8px;
+    margin-bottom: 0;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.2;
   }
   #opciones-panel button:hover { background: #DCEEFB; }
-  #opciones-panel button .icono-opcion { font-size: 15px; }
+  #opciones-panel button .icono-opcion { font-size: 14px; flex-shrink: 0; }
 
   .boton-volver {
     background: #e8e8e8 !important;
@@ -1059,7 +1063,7 @@
   // Regresa del panel actual al menu de "Más opciones" (☰)
   function volverAOpciones() {
     cerrarPaneles(opcionesPanel);
-    opcionesPanel.style.display = 'block';
+    opcionesPanel.style.display = 'grid';
   }
 
   // Agrega el boton "← Volver al menú" al final de un panel
@@ -1073,9 +1077,9 @@
   }
 
   btnOpciones.addEventListener('click', () => {
-    const abrir = opcionesPanel.style.display !== 'block';
+    const abrir = opcionesPanel.style.display !== 'grid';
     cerrarPaneles(opcionesPanel);
-    opcionesPanel.style.display = abrir ? 'block' : 'none';
+    opcionesPanel.style.display = abrir ? 'grid' : 'none';
   });
 
   // ---------- Sistema de tickets (Soporte Tecnico) ----------
