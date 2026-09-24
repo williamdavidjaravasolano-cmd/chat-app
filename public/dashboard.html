@@ -881,8 +881,7 @@
         <tr class="fila-detalle" data-fila-detalle="${escaparHTML(t.numero)}" style="display:none;">
           <td colspan="6">
             ${badgeAtrasoDetalle}
-            ${cuentaRegresiva ? `<div style="font-size:13px; font-weight:bold; color:${cuentaRegresiva.color}; margin-bottom:6px;">${cuentaRegresiva.texto}</div>` : ''}
-            <div style="margin-bottom:4px;"><strong>Tipo de servicio:</strong> ${escaparHTML(tipoServicio)} (tiempo oficial de atención: ${textoSla}) &nbsp;·&nbsp; <strong>Categoría:</strong> ${escaparHTML(t.categoria)} &nbsp;·&nbsp; <strong>Prioridad:</strong> ${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</div>
+            <div style="margin-bottom:4px;"><strong>Tipo de servicio:</strong> ${escaparHTML(tipoServicio)} (tiempo oficial de atención: ${textoSla}${cuentaRegresiva ? ` — <span style="font-weight:bold; color:${cuentaRegresiva.color};">${cuentaRegresiva.texto}</span>` : ''}) &nbsp;·&nbsp; <strong>Categoría:</strong> ${escaparHTML(t.categoria)} &nbsp;·&nbsp; <strong>Prioridad:</strong> ${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</div>
             <div style="margin-bottom:4px;"><strong>Área / Cargo / Ext:</strong> ${escaparHTML(t.area || 'N/A')} · ${escaparHTML(t.cargo || 'N/A')} · ${escaparHTML(t.extension || 'N/A')}</div>
             <div style="margin-bottom:4px;"><strong>Incidencia completa:</strong> ${escaparHTML(t.descripcion)}${imagenHtml}</div>
             <div class="acciones-fila" style="flex-direction:row; margin-top:8px;">${botonesAccion}</div>
