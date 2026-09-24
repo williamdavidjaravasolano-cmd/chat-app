@@ -222,7 +222,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias, #panel-tecnicos-en-linea, #panel-administrar-tecnicos, #panel-avisos-conocidos {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias, #panel-tecnicos-en-linea, #panel-administrar-tecnicos, #panel-avisos-conocidos, #panel-plantillas {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -553,6 +553,7 @@
   body.modo-oscuro #panel-tecnicos-en-linea,
   body.modo-oscuro #panel-administrar-tecnicos,
   body.modo-oscuro #panel-avisos-conocidos,
+  body.modo-oscuro #panel-plantillas,
   body.modo-oscuro #opciones-panel {
     background: #1e1e1e;
     color: #e6e6e6;
@@ -658,6 +659,7 @@
   <div id="panel-tecnicos-en-linea"></div>
   <div id="panel-administrar-tecnicos"></div>
   <div id="panel-avisos-conocidos"></div>
+  <div id="panel-plantillas"></div>
   <div id="opciones-panel"></div>
 
   <form id="form-mensaje">
@@ -741,6 +743,7 @@
   const panelTecnicosEnLinea = document.getElementById('panel-tecnicos-en-linea');
   const panelAdministrarTecnicos = document.getElementById('panel-administrar-tecnicos');
   const panelAvisosConocidos = document.getElementById('panel-avisos-conocidos');
+  const panelPlantillas = document.getElementById('panel-plantillas');
 
   // Valor inicial (por si tarda en llegar la respuesta del servidor); se
   // actualiza solo apenas se conecta, y sigue actualizada si un administrador
@@ -984,7 +987,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias, panelTecnicosEnLinea, panelAdministrarTecnicos, panelAvisosConocidos].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias, panelTecnicosEnLinea, panelAdministrarTecnicos, panelAvisosConocidos, panelPlantillas].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -1045,6 +1048,7 @@
       opciones.push({ icono: '🛠️', texto: 'Panel técnico', accion: () => abrirPanel(panelTecnico, () => socket.emit('obtener-todos-tickets')) });
       opciones.push({ icono: '🧠', texto: 'Respuestas de la IA', accion: () => abrirPanel(panelIA, () => socket.emit('obtener-respuestas-ia')) });
       opciones.push({ icono: '📢', texto: 'Problemas conocidos', accion: () => abrirPanel(panelAvisosConocidos, () => socket.emit('obtener-avisos-conocidos')) });
+      opciones.push({ icono: '⚡', texto: 'Respuestas rápidas', accion: () => { modoListaPlantillas = 'panel'; abrirPanel(panelPlantillas, () => socket.emit('obtener-plantillas')); } });
     }
 
     if (esSoporteTecnico && puedeVerReportes()) {
@@ -1795,6 +1799,121 @@
 
   // ---------- Conversacion privada por ticket ----------
   let ticketConversacionAbierta = null;
+  let selectorPlantillasDiv = null;
+  let inputTextoConversacionActual = null;
+  let modoListaPlantillas = 'panel'; // 'panel' (administrar) o 'selector' (elegir una para insertar)
+
+  function mostrarSelectorPlantillas(inputTexto) {
+    inputTextoConversacionActual = inputTexto;
+    modoListaPlantillas = 'selector';
+    socket.emit('obtener-plantillas');
+  }
+
+  socket.on('lista-plantillas', (plantillas) => {
+    if (modoListaPlantillas === 'panel') {
+      construirPanelPlantillas(plantillas);
+      return;
+    }
+
+    if (!selectorPlantillasDiv) return;
+    selectorPlantillasDiv.innerHTML = '';
+
+    if (!plantillas || plantillas.length === 0) {
+      selectorPlantillasDiv.innerHTML = '<div style="font-size:12px; color:#888; padding:6px;">No tienes respuestas rápidas guardadas todavía. Créalas desde el menú ☰ → Respuestas rápidas.</div>';
+    } else {
+      plantillas.forEach((p) => {
+        const opcion = document.createElement('div');
+        opcion.textContent = p.texto;
+        opcion.style.cssText = 'padding:6px 8px; font-size:12px; cursor:pointer; border-bottom:1px solid #eee;';
+        opcion.addEventListener('mouseenter', () => { opcion.style.background = '#f0f0f0'; });
+        opcion.addEventListener('mouseleave', () => { opcion.style.background = 'white'; });
+        opcion.addEventListener('click', () => {
+          if (inputTextoConversacionActual) {
+            inputTextoConversacionActual.value = p.texto;
+            inputTextoConversacionActual.focus();
+          }
+          selectorPlantillasDiv.style.display = 'none';
+        });
+        selectorPlantillasDiv.appendChild(opcion);
+      });
+    }
+    selectorPlantillasDiv.style.display = 'block';
+  });
+
+  // Panel de administracion de plantillas (crear/eliminar)
+  function construirPanelPlantillas(plantillas) {
+    panelPlantillas.innerHTML = '';
+
+    if (plantillas === null) {
+      panelPlantillas.innerHTML = '<div class="faq-titulo">No tienes autorización para ver esta sección.</div>';
+      agregarBotonVolver(panelPlantillas);
+      return;
+    }
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = `⚡ Respuestas rápidas (${plantillas.length})`;
+    panelPlantillas.appendChild(titulo);
+
+    const explicacion = document.createElement('div');
+    explicacion.style.cssText = 'font-size:12px; color:#888; margin-bottom:8px;';
+    explicacion.textContent = 'Se comparten entre todos los técnicos. Úsalas con el botón ⚡ dentro de la conversación privada de un ticket.';
+    panelPlantillas.appendChild(explicacion);
+
+    if (plantillas.length === 0) {
+      const vacio = document.createElement('div');
+      vacio.classList.add('faq-titulo');
+      vacio.textContent = 'Todavía no hay ninguna guardada.';
+      panelPlantillas.appendChild(vacio);
+    }
+
+    plantillas.forEach((p) => {
+      const item = document.createElement('div');
+      item.classList.add('item-ticket');
+      item.innerHTML = `<div class="descripcion-ticket">${escaparHTML(p.texto)}</div>`;
+      const botonEliminar = document.createElement('button');
+      botonEliminar.type = 'button';
+      botonEliminar.textContent = '🗑️ Eliminar';
+      botonEliminar.style.cssText = 'background:#e53935; color:white; margin-top:6px; padding:6px 10px; font-size:12px; border:none; border-radius:6px; cursor:pointer;';
+      botonEliminar.addEventListener('click', () => {
+        socket.emit('eliminar-plantilla', { id: p._id });
+      });
+      item.appendChild(botonEliminar);
+      panelPlantillas.appendChild(item);
+    });
+
+    const separador = document.createElement('div');
+    separador.style.cssText = 'border-top:1px dashed #ccc; margin:12px 0 8px; padding-top:8px; font-size:13px; color:#555; font-weight:bold;';
+    separador.textContent = 'Crear una nueva';
+    panelPlantillas.appendChild(separador);
+
+    const textareaNuevaPlantilla = document.createElement('textarea');
+    textareaNuevaPlantilla.rows = 2;
+    textareaNuevaPlantilla.placeholder = 'Ej: Por favor reinicia el equipo y avísame si el problema continúa.';
+    panelPlantillas.appendChild(textareaNuevaPlantilla);
+
+    const botonCrearPlantilla = document.createElement('button');
+    botonCrearPlantilla.type = 'button';
+    botonCrearPlantilla.textContent = '➕ Guardar';
+    botonCrearPlantilla.classList.add('boton-enviar-ticket');
+    botonCrearPlantilla.addEventListener('click', () => {
+      const texto = textareaNuevaPlantilla.value.trim();
+      if (!texto) return;
+      socket.emit('crear-plantilla', { texto });
+    });
+    panelPlantillas.appendChild(botonCrearPlantilla);
+
+    agregarBotonVolver(panelPlantillas);
+  }
+
+  socket.on('resultado-plantilla', (resultado) => {
+    if (resultado.ok) {
+      modoListaPlantillas = 'panel';
+      socket.emit('obtener-plantillas'); // refresca la lista del panel
+    } else {
+      alert(resultado.error || 'No se pudo completar la acción.');
+    }
+  });
 
   function abrirConversacionTicket(numero) {
     ticketConversacionAbierta = numero;
@@ -1809,6 +1928,10 @@
     contenedorMensajes.id = 'conv-ticket-mensajes';
     panelConversacionTicket.appendChild(contenedorMensajes);
 
+    selectorPlantillasDiv = document.createElement('div');
+    selectorPlantillasDiv.style.cssText = 'display:none; max-height:140px; overflow-y:auto; border:1px solid #ccc; border-radius:6px; margin-bottom:6px; background:white;';
+    panelConversacionTicket.appendChild(selectorPlantillasDiv);
+
     const filaInput = document.createElement('div');
     filaInput.classList.add('conv-ticket-input-fila');
     const inputTexto = document.createElement('input');
@@ -1818,6 +1941,18 @@
     botonEnviar.type = 'button';
     botonEnviar.textContent = 'Enviar';
     filaInput.appendChild(inputTexto);
+
+    if (esTecnicoActual()) {
+      const botonPlantillas = document.createElement('button');
+      botonPlantillas.type = 'button';
+      botonPlantillas.textContent = '⚡';
+      botonPlantillas.title = 'Respuestas rápidas';
+      botonPlantillas.addEventListener('click', () => {
+        mostrarSelectorPlantillas(inputTexto);
+      });
+      filaInput.appendChild(botonPlantillas);
+    }
+
     filaInput.appendChild(botonEnviar);
     panelConversacionTicket.appendChild(filaInput);
 

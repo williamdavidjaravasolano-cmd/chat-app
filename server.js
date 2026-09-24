@@ -628,6 +628,16 @@ const avisoConocidoSchema = new mongoose.Schema({
 });
 const AvisoConocido = mongoose.model('AvisoConocido', avisoConocidoSchema);
 
+// ---------- Respuestas rapidas guardadas (plantillas) ----------
+// Compartidas entre todos los tecnicos, para no escribir lo mismo una y otra vez
+// en la conversacion privada con un usuario.
+const plantillaRespuestaSchema = new mongoose.Schema({
+  texto: { type: String, required: true },
+  creadoPor: String,
+  fecha: { type: Date, default: Date.now }
+});
+const PlantillaRespuesta = mongoose.model('PlantillaRespuesta', plantillaRespuestaSchema);
+
 async function buscarAvisoConocido(textoNormalizado) {
   try {
     const avisos = await AvisoConocido.find({ activo: true });
@@ -1579,6 +1589,45 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Error desactivando aviso conocido:', err.message);
       socket.emit('resultado-aviso-conocido', { ok: false, error: 'Error del servidor.' });
+    }
+  });
+
+  // ---------- Respuestas rapidas guardadas (plantillas), cualquier tecnico autorizado ----------
+  socket.on('obtener-plantillas', async () => {
+    if (!esTecnicoAutorizado(nombreActual)) {
+      socket.emit('lista-plantillas', null);
+      return;
+    }
+    try {
+      const plantillas = await PlantillaRespuesta.find({}).sort({ fecha: -1 });
+      socket.emit('lista-plantillas', plantillas);
+    } catch (err) {
+      console.error('Error obteniendo plantillas:', err.message);
+      socket.emit('lista-plantillas', []);
+    }
+  });
+
+  socket.on('crear-plantilla', async ({ texto }) => {
+    if (!esTecnicoAutorizado(nombreActual)) return;
+    const textoLimpio = (texto || '').trim();
+    if (!textoLimpio) return;
+    try {
+      await new PlantillaRespuesta({ texto: textoLimpio, creadoPor: nombreActual }).save();
+      socket.emit('resultado-plantilla', { ok: true });
+    } catch (err) {
+      console.error('Error creando plantilla:', err.message);
+      socket.emit('resultado-plantilla', { ok: false, error: 'Error del servidor.' });
+    }
+  });
+
+  socket.on('eliminar-plantilla', async ({ id }) => {
+    if (!esTecnicoAutorizado(nombreActual)) return;
+    try {
+      await PlantillaRespuesta.findByIdAndDelete(id);
+      socket.emit('resultado-plantilla', { ok: true });
+    } catch (err) {
+      console.error('Error eliminando plantilla:', err.message);
+      socket.emit('resultado-plantilla', { ok: false, error: 'Error del servidor.' });
     }
   });
 
