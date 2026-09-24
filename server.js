@@ -614,6 +614,32 @@ const sugerenciaSchema = new mongoose.Schema({
 sugerenciaSchema.index({ tecnicoCalificado: 1 }); // acelera calcular el promedio por tecnico
 const Sugerencia = mongoose.model('Sugerencia', sugerenciaSchema);
 
+// ---------- Avisos de problemas conocidos ----------
+// Un tecnico puede marcar un problema como "ya lo sabemos", con palabras clave.
+// Si un usuario escribe algo que coincide, el bot avisa que ya se sabe del problema
+// en vez de mandarlo a las preguntas frecuentes o a la IA (para evitar tickets
+// duplicados de una misma falla masiva).
+const avisoConocidoSchema = new mongoose.Schema({
+  palabrasClave: [String], // ej: ['laboratorio', 'lab']
+  mensaje: { type: String, required: true },
+  creadoPor: String,
+  activo: { type: Boolean, default: true },
+  fecha: { type: Date, default: Date.now }
+});
+const AvisoConocido = mongoose.model('AvisoConocido', avisoConocidoSchema);
+
+async function buscarAvisoConocido(textoNormalizado) {
+  try {
+    const avisos = await AvisoConocido.find({ activo: true });
+    return avisos.find((aviso) =>
+      aviso.palabrasClave.some((palabra) => textoNormalizado.includes(normalizarTexto(palabra)))
+    ) || null;
+  } catch (err) {
+    console.error('Error buscando avisos de problemas conocidos:', err.message);
+    return null;
+  }
+}
+
 // ---------- Preguntas frecuentes por sala ----------
 // Puedes agregar mas preguntas aqui. El "pregunta" debe escribirse EXACTAMENTE
 // igual en el archivo public/index.html (objeto preguntasPorSala), porque es lo
@@ -1189,11 +1215,24 @@ io.on('connection', (socket) => {
     let numeroTicketGenerado = null;
     const textoNormalizado = normalizarTexto(data.texto);
 
+    // Revisamos primero si hay un aviso de "problema conocido" activo que coincida
+    // (tiene prioridad sobre las preguntas frecuentes y la IA)
+    if (data.tipo === 'texto' && data.sala === SALA_SOPORTE) {
+      const avisoEncontrado = await buscarAvisoConocido(textoNormalizado);
+      if (avisoEncontrado) {
+        respuestaBot = `📢 ${avisoEncontrado.mensaje}`;
+        nombreBot = NOMBRE_BOT_SOPORTE;
+        esFaq = true; // para que se vea la encuesta 👍👎 y el boton de crear ticket igual
+        preguntaCanonica = data.texto;
+        ultimaPreguntaFaq = data.texto;
+      }
+    }
+
     // Primero revisamos si el mensaje indica que una respuesta anterior no funciono.
     // Esto va ANTES de buscar en las preguntas frecuentes, porque frases como
     // "sigue lento" contienen la misma palabra clave ("lento") que la pregunta
     // original, y no queremos repetir la misma respuesta.
-    if (data.tipo === 'texto' && (data.sala === SALA_SOPORTE || data.sala === SALA_ASESORIA)
+    if (!respuestaBot && data.tipo === 'texto' && (data.sala === SALA_SOPORTE || data.sala === SALA_ASESORIA)
         && frasesInsatisfaccion.some((frase) => textoNormalizado.includes(frase))) {
       try {
         const numeroTicket = await generarNumeroTicket();
@@ -1498,6 +1537,49 @@ io.on('connection', (socket) => {
   // de sugerencias -- se mantiene sincronizada con la base de datos automaticamente.
   socket.on('obtener-lista-tecnicos', () => {
     socket.emit('lista-tecnicos-publica', TECNICOS_AUTORIZADOS);
+  });
+
+  // ---------- Avisos de problemas conocidos (cualquier tecnico autorizado) ----------
+  socket.on('obtener-avisos-conocidos', async () => {
+    if (!esTecnicoAutorizado(nombreActual)) {
+      socket.emit('lista-avisos-conocidos', null);
+      return;
+    }
+    try {
+      const avisos = await AvisoConocido.find({}).sort({ fecha: -1 });
+      socket.emit('lista-avisos-conocidos', avisos);
+    } catch (err) {
+      console.error('Error obteniendo avisos conocidos:', err.message);
+      socket.emit('lista-avisos-conocidos', []);
+    }
+  });
+
+  socket.on('crear-aviso-conocido', async ({ palabrasClave, mensaje }) => {
+    if (!esTecnicoAutorizado(nombreActual)) return;
+    const palabras = (palabrasClave || '').split(',').map((p) => p.trim()).filter(Boolean);
+    const mensajeLimpio = (mensaje || '').trim();
+    if (palabras.length === 0 || !mensajeLimpio) {
+      socket.emit('resultado-aviso-conocido', { ok: false, error: 'Escribe al menos una palabra clave y el mensaje.' });
+      return;
+    }
+    try {
+      await new AvisoConocido({ palabrasClave: palabras, mensaje: mensajeLimpio, creadoPor: nombreActual, activo: true }).save();
+      socket.emit('resultado-aviso-conocido', { ok: true, mensaje: 'Aviso creado y activo.' });
+    } catch (err) {
+      console.error('Error creando aviso conocido:', err.message);
+      socket.emit('resultado-aviso-conocido', { ok: false, error: 'Error del servidor.' });
+    }
+  });
+
+  socket.on('desactivar-aviso-conocido', async ({ id }) => {
+    if (!esTecnicoAutorizado(nombreActual)) return;
+    try {
+      await AvisoConocido.findByIdAndUpdate(id, { activo: false });
+      socket.emit('resultado-aviso-conocido', { ok: true, mensaje: 'Aviso desactivado.' });
+    } catch (err) {
+      console.error('Error desactivando aviso conocido:', err.message);
+      socket.emit('resultado-aviso-conocido', { ok: false, error: 'Error del servidor.' });
+    }
   });
 
   // ---------- Administrar tecnicos (agregar/quitar), solo Hector y William David ----------

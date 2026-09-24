@@ -222,7 +222,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias, #panel-tecnicos-en-linea, #panel-administrar-tecnicos {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias, #panel-tecnicos-en-linea, #panel-administrar-tecnicos, #panel-avisos-conocidos {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -552,6 +552,7 @@
   body.modo-oscuro #panel-ver-sugerencias,
   body.modo-oscuro #panel-tecnicos-en-linea,
   body.modo-oscuro #panel-administrar-tecnicos,
+  body.modo-oscuro #panel-avisos-conocidos,
   body.modo-oscuro #opciones-panel {
     background: #1e1e1e;
     color: #e6e6e6;
@@ -656,6 +657,7 @@
   <div id="panel-ver-sugerencias"></div>
   <div id="panel-tecnicos-en-linea"></div>
   <div id="panel-administrar-tecnicos"></div>
+  <div id="panel-avisos-conocidos"></div>
   <div id="opciones-panel"></div>
 
   <form id="form-mensaje">
@@ -732,6 +734,7 @@
   const panelVerSugerencias = document.getElementById('panel-ver-sugerencias');
   const panelTecnicosEnLinea = document.getElementById('panel-tecnicos-en-linea');
   const panelAdministrarTecnicos = document.getElementById('panel-administrar-tecnicos');
+  const panelAvisosConocidos = document.getElementById('panel-avisos-conocidos');
 
   // Valor inicial (por si tarda en llegar la respuesta del servidor); se
   // actualiza solo apenas se conecta, y sigue actualizada si un administrador
@@ -966,7 +969,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias, panelTecnicosEnLinea, panelAdministrarTecnicos].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias, panelTecnicosEnLinea, panelAdministrarTecnicos, panelAvisosConocidos].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -1026,6 +1029,7 @@
     if (esSoporteTecnico && esTecnicoActual()) {
       opciones.push({ icono: '🛠️', texto: 'Panel técnico', accion: () => abrirPanel(panelTecnico, () => socket.emit('obtener-todos-tickets')) });
       opciones.push({ icono: '🧠', texto: 'Respuestas de la IA', accion: () => abrirPanel(panelIA, () => socket.emit('obtener-respuestas-ia')) });
+      opciones.push({ icono: '📢', texto: 'Problemas conocidos', accion: () => abrirPanel(panelAvisosConocidos, () => socket.emit('obtener-avisos-conocidos')) });
     }
 
     if (esSoporteTecnico && puedeVerReportes()) {
@@ -2168,6 +2172,97 @@
     if (resultado.ok) {
       alert(resultado.mensaje || 'Listo.');
       socket.emit('obtener-tecnicos-administrar'); // refresca la lista
+    } else {
+      alert(resultado.error || 'No se pudo completar la acción.');
+    }
+  });
+
+  // ---------- Avisos de problemas conocidos ----------
+  function construirPanelAvisosConocidos(avisos) {
+    panelAvisosConocidos.innerHTML = '';
+
+    if (avisos === null) {
+      panelAvisosConocidos.innerHTML = '<div class="faq-titulo">No tienes autorización para ver esta sección.</div>';
+      agregarBotonVolver(panelAvisosConocidos);
+      return;
+    }
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = '📢 Avisos de problemas conocidos';
+    panelAvisosConocidos.appendChild(titulo);
+
+    const explicacion = document.createElement('div');
+    explicacion.style.cssText = 'font-size:12px; color:#888; margin-bottom:8px;';
+    explicacion.textContent = 'Si un usuario escribe algo relacionado a las palabras clave, el bot le avisa que ya se conoce el problema, en vez de mandarlo a las preguntas frecuentes o a la IA.';
+    panelAvisosConocidos.appendChild(explicacion);
+
+    const activos = avisos.filter((a) => a.activo);
+    if (activos.length === 0) {
+      const vacio = document.createElement('div');
+      vacio.classList.add('faq-titulo');
+      vacio.textContent = 'No hay ningún aviso activo en este momento.';
+      panelAvisosConocidos.appendChild(vacio);
+    }
+
+    activos.forEach((aviso) => {
+      const item = document.createElement('div');
+      item.classList.add('item-ticket');
+      item.innerHTML = `
+        <div class="fila-superior"><strong>${escaparHTML(aviso.palabrasClave.join(', '))}</strong></div>
+        <div class="descripcion-ticket">${escaparHTML(aviso.mensaje)}</div>
+        <div class="descripcion-ticket" style="color:#999; font-size:11px;">Creado por ${escaparHTML(aviso.creadoPor || 'N/A')}</div>
+      `;
+      const botonDesactivar = document.createElement('button');
+      botonDesactivar.type = 'button';
+      botonDesactivar.textContent = '✅ Ya se resolvió (desactivar)';
+      botonDesactivar.style.cssText = 'background:#4caf50; color:white; margin-top:6px; padding:6px 10px; font-size:12px; border:none; border-radius:6px; cursor:pointer;';
+      botonDesactivar.addEventListener('click', () => {
+        socket.emit('desactivar-aviso-conocido', { id: aviso._id });
+      });
+      item.appendChild(botonDesactivar);
+      panelAvisosConocidos.appendChild(item);
+    });
+
+    const separador = document.createElement('div');
+    separador.style.cssText = 'border-top:1px dashed #ccc; margin:12px 0 8px; padding-top:8px; font-size:13px; color:#555; font-weight:bold;';
+    separador.textContent = 'Crear un nuevo aviso';
+    panelAvisosConocidos.appendChild(separador);
+
+    const inputPalabras = document.createElement('input');
+    inputPalabras.type = 'text';
+    inputPalabras.placeholder = 'Palabras clave, separadas por coma (ej: laboratorio, lab)';
+    inputPalabras.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-bottom:6px;';
+    panelAvisosConocidos.appendChild(inputPalabras);
+
+    const textareaMensajeAviso = document.createElement('textarea');
+    textareaMensajeAviso.rows = 2;
+    textareaMensajeAviso.placeholder = 'Mensaje que verá el usuario (ej: Laboratorio está lento, ya lo estamos revisando, no hace falta reportarlo)';
+    panelAvisosConocidos.appendChild(textareaMensajeAviso);
+
+    const botonCrearAviso = document.createElement('button');
+    botonCrearAviso.type = 'button';
+    botonCrearAviso.textContent = '📢 Crear aviso';
+    botonCrearAviso.classList.add('boton-enviar-ticket');
+    botonCrearAviso.addEventListener('click', () => {
+      const palabrasClave = inputPalabras.value.trim();
+      const mensaje = textareaMensajeAviso.value.trim();
+      if (!palabrasClave || !mensaje) { alert('Completa las palabras clave y el mensaje.'); return; }
+      socket.emit('crear-aviso-conocido', { palabrasClave, mensaje });
+    });
+    panelAvisosConocidos.appendChild(botonCrearAviso);
+
+    agregarBotonVolver(panelAvisosConocidos);
+  }
+
+  socket.on('lista-avisos-conocidos', (avisos) => {
+    construirPanelAvisosConocidos(avisos);
+  });
+
+  socket.on('resultado-aviso-conocido', (resultado) => {
+    if (resultado.ok) {
+      alert(resultado.mensaje || 'Listo.');
+      socket.emit('obtener-avisos-conocidos'); // refresca la lista
     } else {
       alert(resultado.error || 'No se pudo completar la acción.');
     }
