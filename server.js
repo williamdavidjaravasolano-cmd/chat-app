@@ -121,7 +121,8 @@ const ticketSchema = new mongoose.Schema({
   calificacion: { type: Number, default: null }, // 1 a 5, la pone el usuario cuando el ticket queda Resuelto
   comentarioCalificacion: { type: String, default: null },
   historial: [{ estado: String, fecha: { type: Date, default: Date.now } }],
-  fechaCreacion: { type: Date, default: Date.now }
+  fechaCreacion: { type: Date, default: Date.now },
+  alertaSlaEnviada: { type: Boolean, default: false } // evita repetir la alerta de "por vencer" varias veces
 });
 ticketSchema.index({ nombre: 1 }); // acelera "Mis tickets" (busca por quien lo creo)
 ticketSchema.index({ tecnicoAsignado: 1, estado: 1 }); // acelera el Panel tecnico y el Dashboard
@@ -775,6 +776,10 @@ mongoose.connection.once('open', async () => {
   // Revisa cada minuto si hay tickets sin tomar que ya cumplieron el tiempo de espera
   setInterval(asignarTicketsAutomaticamente, 60 * 1000);
 
+  // Revisa cada minuto si algun caso esta por vencer su tiempo oficial de atencion,
+  // para avisar al tecnico asignado, o asignar de emergencia si nadie lo ha tomado.
+  setInterval(revisarAlertasYAsignacionPorSla, 60 * 1000);
+
   // Revisa cada 5 minutos el estado de los servicios, y manda un correo si algo
   // cambia (se cae, o se recupera). Si no hay correo configurado, no hace nada.
   // Tambien revisa una vez de inmediato al arrancar, para no depender de esperar
@@ -909,6 +914,91 @@ async function asignarTicketsAutomaticamente() {
     }
   } catch (err) {
     console.error('Error asignando tickets automáticamente:', err.message);
+  }
+}
+
+// ---------- Alerta y asignacion de emergencia por tiempo oficial de atencion (SLA) ----------
+// Tiempos oficiales del protocolo del HGM (los mismos que usa el Dashboard).
+const SLA_MINUTOS = {
+  Incidente: { Urgente: 30, Alta: 60, Media: 120, Baja: 240 },
+  Requerimiento: { Urgente: 30, Alta: 60, Media: 480, Baja: 2400 }
+};
+function obtenerSlaMinutos(ticket) {
+  const tipo = SLA_MINUTOS[ticket.tipoServicio] ? ticket.tipoServicio : 'Incidente';
+  const prioridad = ticket.prioridad || 'Media';
+  return SLA_MINUTOS[tipo][prioridad] ?? SLA_MINUTOS.Incidente.Media;
+}
+
+const MINUTOS_AVISO_PREVIO_SLA = 10; // avisa al tecnico asignado cuando falten estos minutos para vencer
+const MINUTOS_MARGEN_ASIGNACION_EMERGENCIA = 2; // si sigue sin tomarse, se fuerza la asignacion X minutos despues del aviso
+
+async function revisarAlertasYAsignacionPorSla() {
+  try {
+    const ticketsActivos = await Ticket.find({ estado: { $ne: 'Resuelto' } });
+
+    for (const ticket of ticketsActivos) {
+      const slaMinutos = obtenerSlaMinutos(ticket);
+      const minutosTranscurridos = (Date.now() - new Date(ticket.fechaCreacion).getTime()) / (1000 * 60);
+      const minutosRestantes = slaMinutos - minutosTranscurridos;
+      const salaDelTicket = ticket.sala || SALA_SOPORTE;
+
+      // Caso 1: tiene tecnico asignado, esta por vencer (10 min o menos), y no se le ha avisado todavia
+      if (ticket.tecnicoAsignado && !ticket.alertaSlaEnviada && minutosRestantes <= MINUTOS_AVISO_PREVIO_SLA && minutosRestantes > 0) {
+        ticket.alertaSlaEnviada = true;
+        await ticket.save();
+
+        const mensajeAlerta = {
+          sala: `ticket-${ticket.numero}`,
+          nombre: NOMBRE_BOT_SOPORTE,
+          texto: `⏰ ${ticket.tecnicoAsignado}, este caso #${ticket.numero} está por vencer su tiempo oficial de atención en aproximadamente ${Math.max(0, Math.round(minutosRestantes))} minuto(s). Por favor revísalo.`,
+          tipo: 'texto',
+          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+        };
+        await new Mensaje(mensajeAlerta).save();
+        io.to(`ticket-${ticket.numero}`).emit('mensaje', mensajeAlerta);
+        io.to(salaDelTicket).emit('mensaje', mensajeAlerta);
+        console.log(`Alerta de SLA enviada para el ticket #${ticket.numero} (tecnico: ${ticket.tecnicoAsignado}).`);
+      }
+
+      // Caso 2: NO tiene tecnico asignado, y ya quedan pocos minutos (el margen de emergencia
+      // despues del punto en el que se hubiera avisado) -- se fuerza la asignacion ya mismo,
+      // sin esperar al ciclo normal de asignarTicketsAutomaticamente.
+      const minutosLimiteEmergencia = MINUTOS_AVISO_PREVIO_SLA - MINUTOS_MARGEN_ASIGNACION_EMERGENCIA;
+      if (!ticket.tecnicoAsignado && minutosRestantes <= minutosLimiteEmergencia) {
+        const conectados = Object.values(usuariosPorSala[SALA_SOPORTE] || {});
+        const tecnicosDisponibles = TECNICOS_AUTORIZADOS.filter((tecnico) =>
+          conectados.some((nombreConectado) => normalizarTexto(nombreConectado) === normalizarTexto(tecnico))
+        );
+        if (tecnicosDisponibles.length === 0) continue;
+
+        const activosPorTecnico = {};
+        for (const tecnico of tecnicosDisponibles) {
+          activosPorTecnico[tecnico] = await Ticket.countDocuments({ tecnicoAsignado: tecnico, estado: 'En proceso' });
+        }
+        const elegido = tecnicosDisponibles.reduce(
+          (min, tecnico) => (activosPorTecnico[tecnico] < activosPorTecnico[min] ? tecnico : min),
+          tecnicosDisponibles[0]
+        );
+
+        ticket.estado = 'En proceso';
+        ticket.tecnicoAsignado = elegido;
+        ticket.historial.push({ estado: 'En proceso' });
+        await ticket.save();
+
+        const mensajeEmergencia = {
+          sala: salaDelTicket,
+          nombre: NOMBRE_BOT_SOPORTE,
+          texto: `🚨 El ticket #${ticket.numero} está a punto de vencer su tiempo oficial de atención y nadie lo había tomado, así que se asignó de emergencia a ${elegido}. ${ticket.nombre}, ya hay un técnico atendiendo tu caso.`,
+          tipo: 'texto',
+          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+        };
+        await new Mensaje(mensajeEmergencia).save();
+        io.to(salaDelTicket).emit('mensaje', mensajeEmergencia);
+        console.log(`Ticket #${ticket.numero} asignado de emergencia a ${elegido} por estar cerca de vencer su SLA.`);
+      }
+    }
+  } catch (err) {
+    console.error('Error revisando alertas y asignacion por SLA:', err.message);
   }
 }
 

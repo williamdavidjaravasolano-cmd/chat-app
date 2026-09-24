@@ -581,6 +581,27 @@
     return ticket.estado !== 'Resuelto' && horasDesde(ticket.fechaCreacion) > obtenerSlaHoras(ticket);
   }
 
+  // Cuenta regresiva (o de atraso) contra el tiempo oficial de atencion del ticket
+  function formatearCuentaRegresiva(ticket) {
+    if (ticket.estado === 'Resuelto') return null;
+    const minutosTotalesSla = obtenerSlaHoras(ticket) * 60;
+    const minutosTranscurridos = (Date.now() - new Date(ticket.fechaCreacion).getTime()) / (1000 * 60);
+    const minutosRestantes = Math.round(minutosTotalesSla - minutosTranscurridos);
+
+    function formatoHoras(minutos) {
+      const abs = Math.abs(minutos);
+      const horas = Math.floor(abs / 60);
+      const mins = abs % 60;
+      return horas > 0 ? `${horas}h ${mins}m` : `${mins}m`;
+    }
+
+    if (minutosRestantes >= 0) {
+      const urgente = minutosRestantes <= 10;
+      return { texto: `⏱️ Vence en ${formatoHoras(minutosRestantes)}`, color: urgente ? '#c62828' : '#555' };
+    }
+    return { texto: `⚠️ Atrasado hace ${formatoHoras(minutosRestantes)}`, color: '#c62828' };
+  }
+
   // Grafico de media dona (SVG puro, sin librerias externas) para el resumen de casos,
   // calculado sobre los tickets creados en el mes que se elija en el selector.
   let mesSeleccionadoGrafico = null; // formato 'YYYY-MM'; se inicializa con el mes actual
@@ -829,6 +850,10 @@
       const tipoServicio = t.tipoServicio || 'Incidente';
       const slaHoras = obtenerSlaHoras(t);
       const textoSla = slaHoras >= 1 ? `${slaHoras}h` : `${Math.round(slaHoras * 60)}min`;
+      const cuentaRegresiva = formatearCuentaRegresiva(t);
+      const cuentaRegresivaHtml = cuentaRegresiva
+        ? `<div style="font-size:11px; color:${cuentaRegresiva.color}; margin-top:2px;">${cuentaRegresiva.texto}</div>`
+        : '';
       const badgeAtrasoDetalle = atrasado
         ? `<div class="badge-atraso" style="margin-bottom:6px;">⚠️ ${Math.floor(horasDesde(t.fechaCreacion))}h transcurridas (límite oficial: ${textoSla})</div>`
         : '';
@@ -844,7 +869,7 @@
       const filaResumen = `
         <tr class="fila-resumen ${atrasado ? 'fila-atrasada' : ''}" data-fila-resumen="${escaparHTML(t.numero)}" data-accion="expandir" data-numero="${escaparHTML(t.numero)}">
           <td data-etiqueta="Ticket"><span class="flecha-expandir">▶</span> <strong>#${escaparHTML(t.numero)}</strong></td>
-          <td data-etiqueta="Asunto">${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(asunto)}</td>
+          <td data-etiqueta="Asunto">${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(asunto)}${cuentaRegresivaHtml}</td>
           <td data-etiqueta="Reportado por">${escaparHTML(t.nombre)}</td>
           <td data-etiqueta="Fecha">${fecha}</td>
           <td data-etiqueta="Estado"><span class="badge ${claseBadge}">${escaparHTML(t.estado)}</span></td>
@@ -856,6 +881,7 @@
         <tr class="fila-detalle" data-fila-detalle="${escaparHTML(t.numero)}" style="display:none;">
           <td colspan="6">
             ${badgeAtrasoDetalle}
+            ${cuentaRegresiva ? `<div style="font-size:13px; font-weight:bold; color:${cuentaRegresiva.color}; margin-bottom:6px;">${cuentaRegresiva.texto}</div>` : ''}
             <div style="margin-bottom:4px;"><strong>Tipo de servicio:</strong> ${escaparHTML(tipoServicio)} (tiempo oficial de atención: ${textoSla}) &nbsp;·&nbsp; <strong>Categoría:</strong> ${escaparHTML(t.categoria)} &nbsp;·&nbsp; <strong>Prioridad:</strong> ${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</div>
             <div style="margin-bottom:4px;"><strong>Área / Cargo / Ext:</strong> ${escaparHTML(t.area || 'N/A')} · ${escaparHTML(t.cargo || 'N/A')} · ${escaparHTML(t.extension || 'N/A')}</div>
             <div style="margin-bottom:4px;"><strong>Incidencia completa:</strong> ${escaparHTML(t.descripcion)}${imagenHtml}</div>
