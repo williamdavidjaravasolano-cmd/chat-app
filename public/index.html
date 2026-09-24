@@ -2689,12 +2689,14 @@
     }
   }
 
-  // Muestra una notificacion del sistema si la pestaña no esta activa
+  // El sonido SIEMPRE suena (para que sepas que algo paso, aunque estes viendo el chat).
+  // La notificacion visual del sistema (ventana emergente) solo aparece si la
+  // pestaña no esta a la vista, para no interrumpir si ya estas mirando el chat.
   function notificarSiEstaEnSegundoPlano(titulo, cuerpo) {
+    reproducirSonidoNotificacion();
+
     const pestañaOculta = document.hidden || !document.hasFocus();
     if (!pestañaOculta) return;
-
-    reproducirSonidoNotificacion();
 
     if ('Notification' in window && Notification.permission === 'granted') {
       const notificacion = new Notification(titulo, { body: cuerpo, icon: '🎫' });
