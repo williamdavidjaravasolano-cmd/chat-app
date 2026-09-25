@@ -262,27 +262,17 @@
   }
   #opciones-panel {
     max-height: 60vh;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 6px;
   }
-  #opciones-panel button {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+  #select-opciones {
     width: 100%;
-    text-align: left;
-    background: #f0f0f0;
-    border: none;
+    padding: 10px;
     border-radius: 6px;
-    padding: 6px 8px;
-    margin-bottom: 0;
+    border: 1px solid #ccc;
+    font-size: 14px;
+    background: white;
     cursor: pointer;
-    font-size: 12px;
-    line-height: 1.2;
   }
   #opciones-panel button:hover { background: #DCEEFB; }
-  #opciones-panel button .icono-opcion { font-size: 14px; flex-shrink: 0; }
 
   .boton-volver {
     background: #e8e8e8 !important;
@@ -576,14 +566,17 @@
   }
   body.modo-oscuro .faq-titulo { color: #6FB4E0; }
   body.modo-oscuro .descripcion-ticket { color: #ccc; }
-  body.modo-oscuro #opciones-panel button,
+  body.modo-oscuro #select-opciones {
+    background: #2a2a2a;
+    color: #e6e6e6;
+    border-color: #444;
+  }
   body.modo-oscuro #faq-panel button,
   body.modo-oscuro #ticket-panel button,
   body.modo-oscuro .boton-volver {
     background: #2a2a2a;
     color: #e6e6e6;
   }
-  body.modo-oscuro #opciones-panel button:hover,
   body.modo-oscuro #faq-panel button:hover,
   body.modo-oscuro #ticket-panel button:hover {
     background: #16425B;
@@ -1121,16 +1114,31 @@
     }
 
     opcionesPanel.innerHTML = '';
-    opciones.forEach((opcion) => {
-      const boton = document.createElement('button');
-      boton.type = 'button';
-      boton.innerHTML = `<span class="icono-opcion">${opcion.icono}</span><span>${opcion.texto}</span>`;
-      boton.addEventListener('click', () => {
-        opcionesPanel.style.display = 'none';
-        opcion.accion();
-      });
-      opcionesPanel.appendChild(boton);
+    const selectOpciones = document.createElement('select');
+    selectOpciones.id = 'select-opciones';
+
+    const opcionPlaceholder = document.createElement('option');
+    opcionPlaceholder.value = '';
+    opcionPlaceholder.textContent = '— Elige una opción —';
+    opcionPlaceholder.disabled = true;
+    opcionPlaceholder.selected = true;
+    selectOpciones.appendChild(opcionPlaceholder);
+
+    opciones.forEach((opcion, indice) => {
+      const item = document.createElement('option');
+      item.value = String(indice);
+      item.textContent = `${opcion.icono} ${opcion.texto}`;
+      selectOpciones.appendChild(item);
     });
+
+    selectOpciones.addEventListener('change', () => {
+      const indice = Number(selectOpciones.value);
+      opcionesPanel.style.display = 'none';
+      selectOpciones.value = '';
+      opciones[indice].accion();
+    });
+
+    opcionesPanel.appendChild(selectOpciones);
 
     btnOpciones.style.display = opciones.length ? 'flex' : 'none';
   }
