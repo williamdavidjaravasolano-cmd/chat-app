@@ -1562,25 +1562,63 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Si el voto fue negativo, avisamos que un asesor va a contactar a la persona
+    // Si el voto fue negativo, la respuesta automatica no sirvio -- en vez de solo
+    // decir "un asesor te va a contactar", creamos un ticket de verdad (o usamos el
+    // que ya existiera), para que un tecnico realmente lo vea y lo pueda tomar.
     if (voto === 'negativo') {
       const nombreBot = sala === SALA_SOPORTE ? NOMBRE_BOT_SOPORTE
         : sala === SALA_ASESORIA ? NOMBRE_BOT_ASESORIA
         : NOMBRE_BOT_SALUDO;
 
-      const mensajeBot = {
-        sala,
-        nombre: nombreBot,
-        texto: `Entendido, ${nombre}. Un asesor va a contactarte pronto para ayudarte con este tema.`,
-        tipo: 'texto',
-        hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
-      };
       try {
+        let ticketFinal = null;
+
+        if (numeroTicket) {
+          // Ya existia un ticket asociado a esta respuesta: solo lo pasamos a "En espera"
+          ticketFinal = await Ticket.findOne({ numero: numeroTicket });
+          if (ticketFinal && ticketFinal.estado === 'Creado') {
+            ticketFinal.estado = 'En espera';
+            ticketFinal.historial.push({ estado: 'En espera' });
+            await ticketFinal.save();
+          }
+        } else {
+          // No habia ningun ticket (era solo una respuesta de FAQ/IA): creamos uno nuevo
+          const numeroNuevo = await generarNumeroTicket();
+          const descripcionTicket = pregunta || respuestaTexto || 'El usuario indicó que la respuesta automática no le sirvió.';
+          const prioridadFinal = await clasificarPrioridadConIA(descripcionTicket, 'Otros', 'Incidente');
+
+          ticketFinal = await new Ticket({
+            numero: numeroNuevo,
+            categoria: 'Otros',
+            descripcion: descripcionTicket,
+            prioridad: prioridadFinal,
+            tipoServicio: 'Incidente',
+            nombre,
+            area: areaActual,
+            cargo: cargoActual,
+            extension: extActual,
+            sala,
+            estado: 'En espera',
+            historial: [{ estado: 'Creado' }, { estado: 'En espera' }]
+          }).save();
+        }
+
+        const textoAviso = ticketFinal
+          ? `Entendido, ${nombre}. Se generó el ticket #${ticketFinal.numero} y un técnico va a contactarte por este mismo chat. Puedes revisar el estado en "Mis tickets" (menú ☰).`
+          : `Entendido, ${nombre}. Un asesor va a contactarte pronto para ayudarte con este tema.`;
+
+        const mensajeBot = {
+          sala,
+          nombre: nombreBot,
+          texto: textoAviso,
+          tipo: 'texto',
+          hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+        };
         await new Mensaje(mensajeBot).save();
+        io.to(sala).emit('mensaje', mensajeBot);
       } catch (err) {
-        console.error('Error guardando mensaje de derivacion:', err.message);
+        console.error('Error creando ticket por voto negativo:', err.message);
       }
-      io.to(sala).emit('mensaje', mensajeBot);
     }
   });
 
