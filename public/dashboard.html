@@ -297,6 +297,8 @@
   </div>
 
   <div class="contenedor">
+    <div style="font-size:12px; font-weight:bold; color:#0B4F6C; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">🛠️ Técnico</div>
+
     <div id="panel-estado-sistema" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <div style="font-size:13px; color:#555; font-weight:bold;">📡 Estado del sistema</div>
@@ -310,21 +312,28 @@
       <div id="lista-tecnicos-en-linea-dash" style="font-size:13px;"></div>
     </div>
 
-    <div id="panel-top-problemas" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); display:none;">
-      <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:8px;">🔝 Problemas más comunes este mes</div>
-      <div id="lista-top-problemas" style="font-size:13px;"></div>
+    <div id="seccion-admin-dashboard" style="display:none;">
+      <div style="font-size:12px; font-weight:bold; color:#0B4F6C; text-transform:uppercase; letter-spacing:0.5px; margin:18px 0 8px;">🔑 Administrador</div>
+
+      <div id="panel-top-problemas" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:8px;">🔝 Problemas más comunes este mes</div>
+        <div id="lista-top-problemas" style="font-size:13px;"></div>
+      </div>
+
+      <div id="calificacion-tecnicos"></div>
+
+      <div id="panel-auditoria-dash" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div style="font-size:13px; color:#555; font-weight:bold;">🧾 Historial de cambios administrativos</div>
+          <button id="btn-toggle-auditoria" style="font-size:11px; background:none; border:none; color:#0B4F6C; cursor:pointer;">Mostrar/ocultar</button>
+        </div>
+        <div id="lista-auditoria-dash" style="font-size:12px; max-height:260px; overflow-y:auto; display:none;"></div>
+      </div>
     </div>
 
-    <div id="panel-auditoria-dash" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); display:none;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <div style="font-size:13px; color:#555; font-weight:bold;">🧾 Historial de cambios administrativos</div>
-        <button id="btn-toggle-auditoria" style="font-size:11px; background:none; border:none; color:#0B4F6C; cursor:pointer;">Mostrar/ocultar</button>
-      </div>
-      <div id="lista-auditoria-dash" style="font-size:12px; max-height:260px; overflow-y:auto; display:none;"></div>
-    </div>
+    <div style="font-size:12px; font-weight:bold; color:#0B4F6C; text-transform:uppercase; letter-spacing:0.5px; margin:18px 0 8px;">🛠️ Técnico</div>
 
     <div id="grafico-resumen"></div>
-    <div id="calificacion-tecnicos"></div>
     <div class="tarjetas" id="tarjetas-resumen"></div>
 
     <div class="filtros">
@@ -1135,6 +1144,7 @@
   // ---------- Top de problemas mas comunes (solo con permiso de Reportes) ----------
   async function cargarTopProblemas() {
     if (!puedeVerReportes()) return;
+    document.getElementById('seccion-admin-dashboard').style.display = 'block';
     const panel = document.getElementById('panel-top-problemas');
     const contenedor = document.getElementById('lista-top-problemas');
     panel.style.display = 'block';
