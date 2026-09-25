@@ -677,6 +677,7 @@
 <script>
   const socket = io();
   let miNombre = '';
+  let datosSesionActual = null; // se usa para volver a unirse a la sala si el socket se reconecta solo
   let miSala = '';
 
   const loginBox = document.getElementById('login-box');
@@ -926,11 +927,24 @@
     miSala = SALA_UNICA;
     btnEntrar.disabled = true;
     btnEntrar.textContent = 'Entrando...';
-    socket.emit('unirse-sala', { nombre, sala: miSala, area, cargo, ext, clave });
+    datosSesionActual = { nombre, sala: miSala, area, cargo, ext, clave };
+    socket.emit('unirse-sala', datosSesionActual);
   }
+
+  // Si el navegador se reconecta solo (por ejemplo, tras un rato de inactividad,
+  // la pestaña en segundo plano, o un corte breve de red), el servidor recibe una
+  // conexion nueva y "olvida" que este tecnico estaba conectado -- por eso hay que
+  // volver a unirse a la sala automaticamente cada vez que se reconecta, no solo
+  // la primera vez que se entra al chat.
+  socket.on('connect', () => {
+    if (datosSesionActual) {
+      socket.emit('unirse-sala', datosSesionActual);
+    }
+  });
 
   btnMenu.addEventListener('click', () => {
     socket.emit('salir-sala', { nombre: miNombre, sala: miSala });
+    datosSesionActual = null;
     chatContainer.style.display = 'none';
     loginBox.style.display = 'block';
     mensajesDiv.innerHTML = '';

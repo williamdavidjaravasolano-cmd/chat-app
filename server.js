@@ -7,9 +7,15 @@ const mongoose = require('mongoose');
 const app = express();
 const server = http.createServer(app);
 
-// Aumentamos el tamano maximo de mensaje para poder enviar imagenes (5 MB)
+// Aumentamos el tamano maximo de mensaje para poder enviar imagenes (5 MB), y
+// hacemos que las conexiones sean mas tolerantes a pestañas en segundo plano o
+// con poca actividad (los navegadores frenan los temporizadores de las pestañas
+// que no estan a la vista, lo que puede hacer que un tecnico "desaparezca" sin
+// haberse desconectado de verdad).
 const io = new Server(server, {
-  maxHttpBufferSize: 5 * 1024 * 1024
+  maxHttpBufferSize: 5 * 1024 * 1024,
+  pingInterval: 25000,
+  pingTimeout: 60000
 });
 
 // Evitamos que el navegador (o la app de escritorio) guarden en cache las
