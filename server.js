@@ -86,10 +86,33 @@ const mensajeSchema = new mongoose.Schema({
   esRespuestaFaq: { type: Boolean, default: false }, // true si es respuesta automatica de una pregunta frecuente
   esRespuestaIA: { type: Boolean, default: false }, // true si la respondio la IA (Groq), no las palabras clave
   preguntaOrigen: { type: String, default: null }, // la pregunta que genero esta respuesta
-  numeroTicket: { type: String, default: null } // el ticket relacionado con esta respuesta, si aplica
+  numeroTicket: { type: String, default: null }, // el ticket relacionado con esta respuesta, si aplica
+  paraUsuario: { type: String, default: null } // a que usuario le pertenece esta conversacion (null = mensaje general para todos)
 });
 mensajeSchema.index({ sala: 1, fecha: 1 }); // acelera cargar el historial de una sala ordenado por fecha
 const Mensaje = mongoose.model('Mensaje', mensajeSchema);
+
+// Guarda un mensaje y lo envia SOLO a quien corresponde: si tiene "paraUsuario",
+// nada mas lo ve esa persona (mas los tecnicos, que ven todo). Si no tiene
+// paraUsuario, es un mensaje realmente general (ej. avisos del sistema) y se
+// manda a toda la sala como antes. Esto es lo que hace que cada usuario normal
+// solo vea su propia conversacion, sin ver la de los demas.
+async function enviarMensaje(datosMensaje, paraUsuario = null) {
+  const mensajeCompleto = { ...datosMensaje, paraUsuario };
+  try {
+    const guardado = await new Mensaje(mensajeCompleto).save();
+    mensajeCompleto._id = guardado._id;
+  } catch (err) {
+    console.error('Error guardando mensaje:', err.message);
+  }
+  // Se combinan las salas en un solo emit (en vez de dos emits separados) para que
+  // Socket.io no le mande el mensaje duplicado a alguien que este en ambas salas
+  // (por ejemplo, un tecnico viendo su propia conversacion).
+  const salaDestino = paraUsuario ? `usuario-${normalizarTexto(paraUsuario)}` : mensajeCompleto.sala;
+  io.to(salaDestino).to('tecnicos-soporte').emit('mensaje', mensajeCompleto);
+  return mensajeCompleto;
+}
+
 
 // Nota: la limpieza del historial del chat cada 24h ahora la hace MongoDB directamente
 // (ver el TTL nativo en el campo "fecha" del mensajeSchema, arriba). Ya no hace falta
@@ -251,8 +274,7 @@ app.post('/api/tickets/:numero/tomar', verificarCredencialesDashboard, async (re
       tipo: 'texto',
       hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
     };
-    await new Mensaje(mensajeTomado).save();
-    io.to(SALA_SOPORTE).emit('mensaje', mensajeTomado);
+    await enviarMensaje(mensajeTomado, ticket.nombre);
 
     res.json({ ok: true, ticket });
   } catch (err) {
@@ -279,12 +301,11 @@ app.post('/api/tickets/:numero/resolver', verificarCredencialesDashboard, async 
     const mensajeConfirmacion = {
       sala: SALA_SOPORTE,
       nombre: NOMBRE_BOT_SOPORTE,
-      texto: `✅ ${req.tecnicoDashboard} marcó el ticket #${ticket.numero} como resuelto (desde el dashboard).\n\nSolución: ${ticket.solucion}`,
+      texto: `✅ ${req.tecnicoDashboard} marcó el ticket #${ticket.numero} como resuelto (desde el dashboard).\n\nSolución: ${ticket.solucion}\n\nPuedes calificar la atención desde "Mis tickets" (menú ☰).`,
       tipo: 'texto',
       hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
     };
-    await new Mensaje(mensajeConfirmacion).save();
-    io.to(SALA_SOPORTE).emit('mensaje', mensajeConfirmacion);
+    await enviarMensaje(mensajeConfirmacion, ticket.nombre);
 
     res.json({ ok: true, ticket });
   } catch (err) {
@@ -329,8 +350,7 @@ app.post('/api/tickets/:numero/aprobar', verificarCredencialesDashboard, async (
       tipo: 'texto',
       hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
     };
-    await new Mensaje(mensajeAprobado).save();
-    io.to(SALA_SOPORTE).emit('mensaje', mensajeAprobado);
+    await enviarMensaje(mensajeAprobado, req.tecnicoDashboard);
 
     res.json({ ok: true, ticket });
   } catch (err) {
@@ -995,8 +1015,7 @@ async function asignarTicketsAutomaticamente() {
         tipo: 'texto',
         hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
       };
-      await new Mensaje(mensajeAsignado).save();
-      io.to(salaDelTicket).emit('mensaje', mensajeAsignado);
+      await enviarMensaje(mensajeAsignado, ticket.nombre);
       console.log(`Ticket #${ticket.numero} asignado automáticamente a ${elegido}.`);
     }
   } catch (err) {
@@ -1042,8 +1061,7 @@ async function revisarAlertasYAsignacionPorSla() {
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
         };
         await new Mensaje(mensajeAlerta).save();
-        io.to(`ticket-${ticket.numero}`).emit('mensaje', mensajeAlerta);
-        io.to(salaDelTicket).emit('mensaje', mensajeAlerta);
+        io.to(`ticket-${ticket.numero}`).to(`usuario-${normalizarTexto(ticket.nombre)}`).to('tecnicos-soporte').emit('mensaje', mensajeAlerta);
         console.log(`Alerta de SLA enviada para el ticket #${ticket.numero} (tecnico: ${ticket.tecnicoAsignado}).`);
       }
 
@@ -1079,8 +1097,7 @@ async function revisarAlertasYAsignacionPorSla() {
           tipo: 'texto',
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
         };
-        await new Mensaje(mensajeEmergencia).save();
-        io.to(salaDelTicket).emit('mensaje', mensajeEmergencia);
+        await enviarMensaje(mensajeEmergencia, ticket.nombre);
         console.log(`Ticket #${ticket.numero} asignado de emergencia a ${elegido} por estar cerca de vencer su SLA.`);
       }
     }
@@ -1131,12 +1148,27 @@ io.on('connection', (socket) => {
     extActual = ext || '';
     socket.join(sala);
 
+    // Cada quien se une a su propia "sala personal" (para recibir solo lo suyo).
+    // Los tecnicos ademas se unen a la sala que ve TODO, para poder monitorear
+    // las conversaciones de cualquier usuario.
+    const esTecnicoDeEsteChat = esTecnicoAutorizado(nombre);
+    socket.join(`usuario-${normalizarTexto(nombre)}`);
+    if (esTecnicoDeEsteChat) socket.join('tecnicos-soporte');
+
     if (!usuariosPorSala[sala]) usuariosPorSala[sala] = {};
     usuariosPorSala[sala][socket.id] = nombre;
 
-    // Cargar el historial de esa sala (ultimos 100 mensajes)
+    // Cargar el historial de esa sala (ultimos 100 mensajes). Los tecnicos ven todo;
+    // un usuario normal solo ve los mensajes que le pertenecen a el.
     try {
-      const historial = await Mensaje.find({ sala }).sort({ fecha: 1 }).limit(100);
+      let historial = await Mensaje.find({ sala }).sort({ fecha: 1 }).limit(100);
+      if (!esTecnicoDeEsteChat) {
+        historial = historial.filter((m) =>
+          m.paraUsuario
+            ? normalizarTexto(m.paraUsuario) === normalizarTexto(nombre)
+            : normalizarTexto(m.nombre) === normalizarTexto(nombre)
+        );
+      }
       socket.emit('historial', historial);
     } catch (err) {
       console.error('Error cargando historial:', err.message);
@@ -1144,7 +1176,7 @@ io.on('connection', (socket) => {
     }
 
     io.to(sala).emit('lista-usuarios', Object.values(usuariosPorSala[sala]));
-    socket.to(sala).emit('mensaje-sistema', `${nombre} se ha unido al chat`);
+    socket.to('tecnicos-soporte').emit('mensaje-sistema', `${nombre} se ha unido al chat`);
 
     // Se une automaticamente a las conversaciones privadas de sus propios tickets,
     // para recibir los mensajes del tecnico sin tener que abrir nada aparte.
@@ -1175,16 +1207,7 @@ io.on('connection', (socket) => {
       tipo: data.tipo || 'texto',
       hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
     };
-
-    // Guardar en la base de datos para que quede en el historial
-    try {
-      const mensajeGuardado = new Mensaje(nuevoMensaje);
-      await mensajeGuardado.save();
-    } catch (err) {
-      console.error('Error guardando mensaje:', err.message);
-    }
-
-    io.to(data.sala).emit('mensaje', nuevoMensaje);
+    await enviarMensaje(nuevoMensaje, data.nombre);
 
     // ---------- Comando /resolver: marca un ticket como resuelto y aprende la solucion ----------
     // Se usa asi, escrito directo en el chat de Soporte Tecnico:
@@ -1198,8 +1221,7 @@ io.on('connection', (socket) => {
           tipo: 'texto',
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
         };
-        await new Mensaje(mensajeSinPermiso).save();
-        io.to(data.sala).emit('mensaje', mensajeSinPermiso);
+        await enviarMensaje(mensajeSinPermiso, data.nombre);
         return;
       }
       const match = data.texto.trim().match(/^\/resolver\s+(\S+)\s+([\s\S]+)$/i);
@@ -1221,12 +1243,11 @@ io.on('connection', (socket) => {
             const mensajeConfirmacion = {
               sala: data.sala,
               nombre: NOMBRE_BOT_SOPORTE,
-              texto: `✅ El técnico marcó el ticket #${numeroTicket} como resuelto.\n\nSolución: ${solucion}\n\n¿Te funcionó? Si la confirmas, escribe: /aprobar ${numeroTicket}`,
+              texto: `✅ El técnico marcó el ticket #${numeroTicket} como resuelto.\n\nSolución: ${solucion}\n\nPuedes calificar la atención desde "Mis tickets" (menú ☰).`,
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
-            await new Mensaje(mensajeConfirmacion).save();
-            io.to(data.sala).emit('mensaje', mensajeConfirmacion);
+            await enviarMensaje(mensajeConfirmacion, ticket.nombre);
           } else {
             const mensajeError = {
               sala: data.sala,
@@ -1235,8 +1256,7 @@ io.on('connection', (socket) => {
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
-            await new Mensaje(mensajeError).save();
-            io.to(data.sala).emit('mensaje', mensajeError);
+            await enviarMensaje(mensajeError, data.nombre);
           }
         } catch (err) {
           console.error('Error resolviendo ticket:', err.message);
@@ -1257,7 +1277,7 @@ io.on('connection', (socket) => {
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
         };
         await new Mensaje(mensajeSinPermiso).save();
-        io.to(data.sala).emit('mensaje', mensajeSinPermiso);
+        await enviarMensaje(mensajeSinPermiso, data.nombre);
         return;
       }
       const match = data.texto.trim().match(/^\/aprobar\s+(\S+)/i);
@@ -1276,8 +1296,7 @@ io.on('connection', (socket) => {
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
-            await new Mensaje(mensajeError).save();
-            io.to(data.sala).emit('mensaje', mensajeError);
+            await enviarMensaje(mensajeError, data.nombre);
           } else if (ticket.estado !== 'Resuelto' || !ticket.solucion) {
             const mensajeError = {
               sala: data.sala,
@@ -1286,8 +1305,7 @@ io.on('connection', (socket) => {
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
-            await new Mensaje(mensajeError).save();
-            io.to(data.sala).emit('mensaje', mensajeError);
+            await enviarMensaje(mensajeError, data.nombre);
           } else if (ticket.aprobadoParaConocimiento) {
             const mensajeYa = {
               sala: data.sala,
@@ -1296,8 +1314,7 @@ io.on('connection', (socket) => {
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
-            await new Mensaje(mensajeYa).save();
-            io.to(data.sala).emit('mensaje', mensajeYa);
+            await enviarMensaje(mensajeYa, data.nombre);
           } else {
             ticket.aprobadoParaConocimiento = true;
             await ticket.save();
@@ -1325,8 +1342,7 @@ io.on('connection', (socket) => {
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
-            await new Mensaje(mensajeAprobado).save();
-            io.to(data.sala).emit('mensaje', mensajeAprobado);
+            await enviarMensaje(mensajeAprobado, data.nombre);
           }
         } catch (err) {
           console.error('Error aprobando ticket:', err.message);
@@ -1346,8 +1362,7 @@ io.on('connection', (socket) => {
           tipo: 'texto',
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
         };
-        await new Mensaje(mensajeSinPermiso).save();
-        io.to(data.sala).emit('mensaje', mensajeSinPermiso);
+        await enviarMensaje(mensajeSinPermiso, data.nombre);
         return;
       }
       const match = data.texto.trim().match(/^\/tomar\s+(\S+)/i);
@@ -1366,8 +1381,7 @@ io.on('connection', (socket) => {
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
-            await new Mensaje(mensajeError).save();
-            io.to(data.sala).emit('mensaje', mensajeError);
+            await enviarMensaje(mensajeError, data.nombre);
           } else if (ticket.estado === 'Resuelto') {
             const mensajeYa = {
               sala: data.sala,
@@ -1376,8 +1390,7 @@ io.on('connection', (socket) => {
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
-            await new Mensaje(mensajeYa).save();
-            io.to(data.sala).emit('mensaje', mensajeYa);
+            await enviarMensaje(mensajeYa, data.nombre);
           } else {
             ticket.estado = 'En proceso';
             ticket.tecnicoAsignado = data.nombre;
@@ -1392,8 +1405,7 @@ io.on('connection', (socket) => {
               tipo: 'texto',
               hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
             };
-            await new Mensaje(mensajeTomado).save();
-            io.to(data.sala).emit('mensaje', mensajeTomado);
+            await enviarMensaje(mensajeTomado, ticket.nombre);
           }
         } catch (err) {
           console.error('Error tomando ticket:', err.message);
@@ -1478,7 +1490,7 @@ io.on('connection', (socket) => {
     }
 
     if (!respuestaBot && data.tipo === 'texto' && saludos.includes(textoNormalizado)) {
-      respuestaBot = `¡Hola ${data.nombre}! Bienvenido a la sala "${data.sala}". ¿En qué te podemos ayudar hoy?`;
+      respuestaBot = `¡Hola ${data.nombre}! Te damos la bienvenida a Soporte Técnico. 📋 Puedes elegir tu consulta en el menú de Preguntas frecuentes (☰), o simplemente describe brevemente tu necesidad aquí mismo. También puedes revisar el estado de tus casos en cualquier momento desde "Mis tickets" (☰).`;
       nombreBot = NOMBRE_BOT_SALUDO;
     }
 
@@ -1512,13 +1524,7 @@ io.on('connection', (socket) => {
           preguntaOrigen: esFaq ? preguntaCanonica : null,
           numeroTicket: numeroTicketGenerado
         };
-        try {
-          const guardado = await new Mensaje(mensajeBot).save();
-          mensajeBot._id = guardado._id;
-        } catch (err) {
-          console.error('Error guardando respuesta del bot:', err.message);
-        }
-        io.to(data.sala).emit('mensaje', mensajeBot);
+        await enviarMensaje(mensajeBot, data.nombre);
       }, 800);
     }
   });
@@ -1550,12 +1556,11 @@ io.on('connection', (socket) => {
           const mensajeCierre = {
             sala,
             nombre: nombreBotCierre,
-            texto: `✅ El ticket #${numeroTicket} quedó marcado como resuelto (confirmado por ${nombre}).`,
+            texto: `✅ El ticket #${numeroTicket} quedó marcado como resuelto (confirmado por ${nombre}). Puedes calificar la atención desde "Mis tickets" (menú ☰).`,
             tipo: 'texto',
             hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
           };
-          await new Mensaje(mensajeCierre).save();
-          io.to(sala).emit('mensaje', mensajeCierre);
+          await enviarMensaje(mensajeCierre, nombre);
         }
       } catch (err) {
         console.error('Error cerrando ticket por voto positivo:', err.message);
@@ -1614,8 +1619,7 @@ io.on('connection', (socket) => {
           tipo: 'texto',
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
         };
-        await new Mensaje(mensajeBot).save();
-        io.to(sala).emit('mensaje', mensajeBot);
+        await enviarMensaje(mensajeBot, nombre);
       } catch (err) {
         console.error('Error creando ticket por voto negativo:', err.message);
       }
@@ -1682,8 +1686,7 @@ io.on('connection', (socket) => {
         tipo: 'texto',
         hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
       };
-      await new Mensaje(mensajeTicket).save();
-      io.to(sala).emit('mensaje', mensajeTicket);
+      await enviarMensaje(mensajeTicket, nombre);
 
       // Si se adjunto una captura, la enviamos tambien como mensaje de imagen en el chat
       if (imagenAdjunta) {
@@ -1694,8 +1697,7 @@ io.on('connection', (socket) => {
           tipo: 'imagen',
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
         };
-        await new Mensaje(mensajeImagen).save();
-        io.to(sala).emit('mensaje', mensajeImagen);
+        await enviarMensaje(mensajeImagen, nombre);
       }
 
       // Si encontramos una respuesta automatica para el problema, la enviamos tambien
@@ -1711,9 +1713,7 @@ io.on('connection', (socket) => {
             preguntaOrigen: item.pregunta,
             numeroTicket: numero
           };
-          const guardado = await new Mensaje(mensajeBot).save();
-          mensajeBot._id = guardado._id;
-          io.to(sala).emit('mensaje', mensajeBot);
+          await enviarMensaje(mensajeBot, nombre);
         }, 800);
       }
     } catch (err) {
@@ -2119,8 +2119,7 @@ io.on('connection', (socket) => {
         tipo: 'texto',
         hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
       };
-      await new Mensaje(mensajeTomado).save();
-      io.to(salaActual).emit('mensaje', mensajeTomado);
+      await enviarMensaje(mensajeTomado, ticket.nombre);
 
       const tickets = await Ticket.find({}).sort({ fechaCreacion: -1 });
       socket.emit('lista-todos-tickets', tickets);
@@ -2146,12 +2145,11 @@ io.on('connection', (socket) => {
       const mensajeConfirmacion = {
         sala: salaActual,
         nombre: NOMBRE_BOT_SOPORTE,
-        texto: `✅ ${nombreActual} marcó el ticket #${numero} como resuelto.\n\nSolución: ${ticket.solucion}\n\n¿Te funcionó? Si la confirmas, escribe: /aprobar ${numero}`,
+        texto: `✅ ${nombreActual} marcó el ticket #${numero} como resuelto.\n\nSolución: ${ticket.solucion}\n\nPuedes calificar la atención desde "Mis tickets" (menú ☰).`,
         tipo: 'texto',
         hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
       };
-      await new Mensaje(mensajeConfirmacion).save();
-      io.to(salaActual).emit('mensaje', mensajeConfirmacion);
+      await enviarMensaje(mensajeConfirmacion, ticket.nombre);
 
       const tickets = await Ticket.find({}).sort({ fechaCreacion: -1 });
       socket.emit('lista-todos-tickets', tickets);
@@ -2192,8 +2190,7 @@ io.on('connection', (socket) => {
         tipo: 'texto',
         hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
       };
-      await new Mensaje(mensajeAprobado).save();
-      io.to(salaActual).emit('mensaje', mensajeAprobado);
+      await enviarMensaje(mensajeAprobado, nombreActual);
 
       const tickets = await Ticket.find({}).sort({ fechaCreacion: -1 });
       socket.emit('lista-todos-tickets', tickets);
@@ -2247,8 +2244,7 @@ io.on('connection', (socket) => {
           tipo: 'texto',
           hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
         };
-        await new Mensaje(mensajeConfirmacion).save();
-        io.to(salaActual).emit('mensaje', mensajeConfirmacion);
+        await enviarMensaje(mensajeConfirmacion, nombreActual);
       }
 
       socket.emit('faq-convertida', { pregunta });

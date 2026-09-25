@@ -1087,30 +1087,30 @@
     const opciones = [];
 
     if (esSoporteTecnico) {
-      opciones.push({ icono: '🎫', texto: 'Crear ticket', accion: () => abrirPanel(ticketPanel, () => construirPanelTicket(false)) });
-      opciones.push({ icono: '📋', texto: 'Mis tickets', accion: () => abrirPanel(ticketsPanel, () => socket.emit('obtener-tickets', { nombre: miNombre })) });
-      opciones.push({ icono: '💡', texto: 'Buzón de sugerencias', accion: () => abrirPanel(panelEnviarSugerencia, construirFormularioSugerencia) });
-      opciones.push({ icono: '🟢', texto: 'Técnicos en línea', accion: () => abrirPanel(panelTecnicosEnLinea, () => socket.emit('obtener-tecnicos-en-linea')) });
+      opciones.push({ grupo: 'General', icono: '🎫', texto: 'Crear ticket', accion: () => abrirPanel(ticketPanel, () => construirPanelTicket(false)) });
+      opciones.push({ grupo: 'General', icono: '📋', texto: 'Mis tickets', accion: () => abrirPanel(ticketsPanel, () => socket.emit('obtener-tickets', { nombre: miNombre })) });
+      opciones.push({ grupo: 'General', icono: '💡', texto: 'Buzón de sugerencias', accion: () => abrirPanel(panelEnviarSugerencia, construirFormularioSugerencia) });
+      opciones.push({ grupo: 'General', icono: '🟢', texto: 'Técnicos en línea', accion: () => abrirPanel(panelTecnicosEnLinea, () => socket.emit('obtener-tecnicos-en-linea')) });
     }
 
     if (esSoporteTecnico && esTecnicoActual()) {
-      opciones.push({ icono: '🛠️', texto: 'Panel técnico', accion: () => abrirPanel(panelTecnico, () => socket.emit('obtener-todos-tickets')) });
-      opciones.push({ icono: '🧠', texto: 'Respuestas de la IA', accion: () => abrirPanel(panelIA, () => socket.emit('obtener-respuestas-ia')) });
-      opciones.push({ icono: '📢', texto: 'Problemas conocidos', accion: () => abrirPanel(panelAvisosConocidos, () => socket.emit('obtener-avisos-conocidos')) });
-      opciones.push({ icono: '⚡', texto: 'Respuestas rápidas', accion: () => { modoListaPlantillas = 'panel'; abrirPanel(panelPlantillas, () => socket.emit('obtener-plantillas')); } });
-      opciones.push({ icono: '📅', texto: 'Mantenimiento programado', accion: () => abrirPanel(panelMantenimiento, () => socket.emit('obtener-avisos-mantenimiento')) });
-      opciones.push({ icono: '🔲', texto: 'Generar código QR', accion: () => abrirPanel(panelGenerarQR, construirPanelGenerarQR) });
+      opciones.push({ grupo: '🛠️ Técnico', icono: '🛠️', texto: 'Panel técnico', accion: () => abrirPanel(panelTecnico, () => socket.emit('obtener-todos-tickets')) });
+      opciones.push({ grupo: '🛠️ Técnico', icono: '🧠', texto: 'Respuestas de la IA', accion: () => abrirPanel(panelIA, () => socket.emit('obtener-respuestas-ia')) });
+      opciones.push({ grupo: '🛠️ Técnico', icono: '📢', texto: 'Problemas conocidos', accion: () => abrirPanel(panelAvisosConocidos, () => socket.emit('obtener-avisos-conocidos')) });
+      opciones.push({ grupo: '🛠️ Técnico', icono: '⚡', texto: 'Respuestas rápidas', accion: () => { modoListaPlantillas = 'panel'; abrirPanel(panelPlantillas, () => socket.emit('obtener-plantillas')); } });
+      opciones.push({ grupo: '🛠️ Técnico', icono: '📅', texto: 'Mantenimiento programado', accion: () => abrirPanel(panelMantenimiento, () => socket.emit('obtener-avisos-mantenimiento')) });
+      opciones.push({ grupo: '🛠️ Técnico', icono: '🔲', texto: 'Generar código QR', accion: () => abrirPanel(panelGenerarQR, construirPanelGenerarQR) });
     }
 
     if (esSoporteTecnico && puedeVerReportes()) {
-      opciones.push({ icono: '📊', texto: 'Reportes', accion: () => abrirPanel(panelReportes, () => socket.emit('obtener-metricas', { nombre: miNombre })) });
-      opciones.push({ icono: '📬', texto: 'Sugerencias recibidas', accion: () => abrirPanel(panelVerSugerencias, () => socket.emit('obtener-sugerencias')) });
-      opciones.push({ icono: '👤', texto: 'Administrar técnicos', accion: () => abrirPanel(panelAdministrarTecnicos, () => socket.emit('obtener-tecnicos-administrar')) });
-      opciones.push({ icono: '🧾', texto: 'Historial de cambios', accion: () => abrirPanel(panelAuditoria, () => socket.emit('obtener-auditoria')) });
+      opciones.push({ grupo: '🔑 Administrador', icono: '📊', texto: 'Reportes', accion: () => abrirPanel(panelReportes, () => socket.emit('obtener-metricas', { nombre: miNombre })) });
+      opciones.push({ grupo: '🔑 Administrador', icono: '📬', texto: 'Sugerencias recibidas', accion: () => abrirPanel(panelVerSugerencias, () => socket.emit('obtener-sugerencias')) });
+      opciones.push({ grupo: '🔑 Administrador', icono: '👤', texto: 'Administrar técnicos', accion: () => abrirPanel(panelAdministrarTecnicos, () => socket.emit('obtener-tecnicos-administrar')) });
+      opciones.push({ grupo: '🔑 Administrador', icono: '🧾', texto: 'Historial de cambios', accion: () => abrirPanel(panelAuditoria, () => socket.emit('obtener-auditoria')) });
     }
 
     if (preguntas) {
-      opciones.push({ icono: '❓', texto: 'Preguntas frecuentes', accion: () => abrirPanel(faqPanel, () => construirPanelFaq(preguntas)) });
+      opciones.push({ grupo: 'General', icono: '❓', texto: 'Preguntas frecuentes', accion: () => abrirPanel(faqPanel, () => construirPanelFaq(preguntas)) });
     }
 
     opcionesPanel.innerHTML = '';
@@ -1124,11 +1124,22 @@
     opcionPlaceholder.selected = true;
     selectOpciones.appendChild(opcionPlaceholder);
 
+    const gruposCreados = {};
     opciones.forEach((opcion, indice) => {
+      let contenedorDestino = selectOpciones;
+      if (opcion.grupo && opcion.grupo !== 'General') {
+        if (!gruposCreados[opcion.grupo]) {
+          const optgroup = document.createElement('optgroup');
+          optgroup.label = opcion.grupo;
+          selectOpciones.appendChild(optgroup);
+          gruposCreados[opcion.grupo] = optgroup;
+        }
+        contenedorDestino = gruposCreados[opcion.grupo];
+      }
       const item = document.createElement('option');
       item.value = String(indice);
       item.textContent = `${opcion.icono} ${opcion.texto}`;
-      selectOpciones.appendChild(item);
+      contenedorDestino.appendChild(item);
     });
 
     selectOpciones.addEventListener('change', () => {
