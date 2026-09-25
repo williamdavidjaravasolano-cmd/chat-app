@@ -426,6 +426,49 @@ app.get('/api/tecnicos-en-linea', verificarCredencialesDashboard, (req, res) => 
   res.json(tecnicosEnLinea);
 });
 
+// Devuelve el aviso de mantenimiento vigente (o null), para mostrarlo en el dashboard
+app.get('/api/mantenimiento-vigente', verificarCredencialesDashboard, async (req, res) => {
+  const aviso = await obtenerAvisoMantenimientoVigente();
+  res.json(aviso);
+});
+
+// Devuelve las descripciones de ticket mas repetidas del mes (aproximacion a "problemas mas comunes")
+app.get('/api/top-problemas', verificarCredencialesDashboard, async (req, res) => {
+  try {
+    const inicioMes = new Date();
+    inicioMes.setDate(1);
+    inicioMes.setHours(0, 0, 0, 0);
+
+    const resultados = await Ticket.aggregate([
+      { $match: { fechaCreacion: { $gte: inicioMes } } },
+      {
+        $group: {
+          _id: { categoria: '$categoria', descripcion: '$descripcion' },
+          total: { $sum: 1 }
+        }
+      },
+      { $sort: { total: -1 } },
+      { $limit: 10 }
+    ]);
+
+    res.json(resultados.map((r) => ({ categoria: r._id.categoria, descripcion: r._id.descripcion, total: r.total })));
+  } catch (err) {
+    console.error('Error en /api/top-problemas:', err.message);
+    res.status(500).json({ error: 'Error obteniendo el top de problemas' });
+  }
+});
+
+// Devuelve el historial de cambios administrativos (para el dashboard)
+app.get('/api/auditoria', verificarCredencialesDashboard, async (req, res) => {
+  try {
+    const registros = await RegistroAuditoria.find({}).sort({ fecha: -1 }).limit(200);
+    res.json(registros);
+  } catch (err) {
+    console.error('Error en /api/auditoria:', err.message);
+    res.status(500).json({ error: 'Error obteniendo el historial de cambios' });
+  }
+});
+
 // Devuelve las sugerencias del buzon (para calcular calificaciones en el dashboard)
 app.get('/api/sugerencias', verificarCredencialesDashboard, async (req, res) => {
   try {
@@ -653,6 +696,44 @@ const plantillaRespuestaSchema = new mongoose.Schema({
   fecha: { type: Date, default: Date.now }
 });
 const PlantillaRespuesta = mongoose.model('PlantillaRespuesta', plantillaRespuestaSchema);
+
+// ---------- Historial de cambios administrativos (auditoria) ----------
+const registroAuditoriaSchema = new mongoose.Schema({
+  accion: { type: String, required: true }, // ej: "Agregar tecnico", "Quitar tecnico", "Crear aviso conocido"...
+  detalle: { type: String, required: true },
+  realizadoPor: { type: String, required: true },
+  fecha: { type: Date, default: Date.now }
+});
+const RegistroAuditoria = mongoose.model('RegistroAuditoria', registroAuditoriaSchema);
+
+async function registrarAuditoria(accion, detalle, realizadoPor) {
+  try {
+    await new RegistroAuditoria({ accion, detalle, realizadoPor }).save();
+  } catch (err) {
+    console.error('Error registrando auditoria:', err.message);
+  }
+}
+
+// ---------- Avisos de mantenimiento programado ----------
+const avisoMantenimientoSchema = new mongoose.Schema({
+  mensaje: { type: String, required: true },
+  fechaInicio: { type: Date, required: true },
+  fechaFin: { type: Date, required: true },
+  creadoPor: String,
+  activo: { type: Boolean, default: true },
+  fecha: { type: Date, default: Date.now }
+});
+const AvisoMantenimiento = mongoose.model('AvisoMantenimiento', avisoMantenimientoSchema);
+
+async function obtenerAvisoMantenimientoVigente() {
+  try {
+    const ahora = new Date();
+    return await AvisoMantenimiento.findOne({ activo: true, fechaFin: { $gte: ahora } }).sort({ fechaInicio: 1 });
+  } catch (err) {
+    console.error('Error consultando aviso de mantenimiento:', err.message);
+    return null;
+  }
+}
 
 async function buscarAvisoConocido(textoNormalizado) {
   try {
@@ -1679,6 +1760,7 @@ io.on('connection', (socket) => {
     }
     try {
       await new AvisoConocido({ palabrasClave: palabras, mensaje: mensajeLimpio, creadoPor: nombreActual, activo: true }).save();
+      await registrarAuditoria('Crear aviso conocido', `Palabras clave: ${palabras.join(', ')} — Mensaje: ${mensajeLimpio}`, nombreActual);
       socket.emit('resultado-aviso-conocido', { ok: true, mensaje: 'Aviso creado y activo.' });
     } catch (err) {
       console.error('Error creando aviso conocido:', err.message);
@@ -1690,6 +1772,7 @@ io.on('connection', (socket) => {
     if (!esTecnicoAutorizado(nombreActual)) return;
     try {
       await AvisoConocido.findByIdAndUpdate(id, { activo: false });
+      await registrarAuditoria('Desactivar aviso conocido', `ID: ${id}`, nombreActual);
       socket.emit('resultado-aviso-conocido', { ok: true, mensaje: 'Aviso desactivado.' });
     } catch (err) {
       console.error('Error desactivando aviso conocido:', err.message);
@@ -1766,6 +1849,7 @@ io.on('connection', (socket) => {
       }
       await new Tecnico({ nombre: nombreLimpio, clave: CLAVE_GENERICA_INICIAL, claveCambiada: false }).save();
       await sincronizarListaTecnicos();
+      await registrarAuditoria('Agregar técnico', `Técnico agregado: ${nombreLimpio}`, nombreActual);
       socket.emit('resultado-administrar-tecnico', { ok: true, mensaje: `${nombreLimpio} fue agregado. Su contraseña inicial es: ${CLAVE_GENERICA_INICIAL}` });
     } catch (err) {
       console.error('Error agregando tecnico:', err.message);
@@ -1778,10 +1862,83 @@ io.on('connection', (socket) => {
     try {
       await Tecnico.deleteOne({ nombre });
       await sincronizarListaTecnicos();
+      await registrarAuditoria('Quitar técnico', `Técnico quitado: ${nombre}`, nombreActual);
       socket.emit('resultado-administrar-tecnico', { ok: true, mensaje: `${nombre} fue quitado de los técnicos autorizados.` });
     } catch (err) {
       console.error('Error quitando tecnico:', err.message);
       socket.emit('resultado-administrar-tecnico', { ok: false, error: 'Error del servidor.' });
+    }
+  });
+
+  // Historial de cambios administrativos, solo Hector y William David
+  socket.on('obtener-auditoria', async () => {
+    if (!puedeVerReportes(nombreActual)) {
+      socket.emit('lista-auditoria', null);
+      return;
+    }
+    try {
+      const registros = await RegistroAuditoria.find({}).sort({ fecha: -1 }).limit(200);
+      socket.emit('lista-auditoria', registros);
+    } catch (err) {
+      console.error('Error obteniendo auditoria:', err.message);
+      socket.emit('lista-auditoria', []);
+    }
+  });
+
+  // ---------- Avisos de mantenimiento programado ----------
+  // Cualquier usuario puede consultar si hay uno vigente (para mostrar el aviso)
+  socket.on('obtener-mantenimiento-vigente', async () => {
+    const aviso = await obtenerAvisoMantenimientoVigente();
+    socket.emit('mantenimiento-vigente', aviso);
+  });
+
+  // Solo tecnicos autorizados administran estos avisos
+  socket.on('obtener-avisos-mantenimiento', async () => {
+    if (!esTecnicoAutorizado(nombreActual)) {
+      socket.emit('lista-avisos-mantenimiento', null);
+      return;
+    }
+    try {
+      const avisos = await AvisoMantenimiento.find({}).sort({ fechaInicio: -1 }).limit(50);
+      socket.emit('lista-avisos-mantenimiento', avisos);
+    } catch (err) {
+      console.error('Error obteniendo avisos de mantenimiento:', err.message);
+      socket.emit('lista-avisos-mantenimiento', []);
+    }
+  });
+
+  socket.on('crear-aviso-mantenimiento', async ({ mensaje, fechaInicio, fechaFin }) => {
+    if (!esTecnicoAutorizado(nombreActual)) return;
+    const mensajeLimpio = (mensaje || '').trim();
+    if (!mensajeLimpio || !fechaInicio || !fechaFin) {
+      socket.emit('resultado-mantenimiento', { ok: false, error: 'Completa el mensaje, la fecha/hora de inicio y de fin.' });
+      return;
+    }
+    try {
+      await new AvisoMantenimiento({
+        mensaje: mensajeLimpio,
+        fechaInicio: new Date(fechaInicio),
+        fechaFin: new Date(fechaFin),
+        creadoPor: nombreActual,
+        activo: true
+      }).save();
+      await registrarAuditoria('Crear aviso de mantenimiento', `${mensajeLimpio} (${fechaInicio} a ${fechaFin})`, nombreActual);
+      socket.emit('resultado-mantenimiento', { ok: true, mensaje: 'Aviso de mantenimiento creado.' });
+    } catch (err) {
+      console.error('Error creando aviso de mantenimiento:', err.message);
+      socket.emit('resultado-mantenimiento', { ok: false, error: 'Error del servidor.' });
+    }
+  });
+
+  socket.on('desactivar-aviso-mantenimiento', async ({ id }) => {
+    if (!esTecnicoAutorizado(nombreActual)) return;
+    try {
+      await AvisoMantenimiento.findByIdAndUpdate(id, { activo: false });
+      await registrarAuditoria('Desactivar aviso de mantenimiento', `ID: ${id}`, nombreActual);
+      socket.emit('resultado-mantenimiento', { ok: true, mensaje: 'Aviso desactivado.' });
+    } catch (err) {
+      console.error('Error desactivando aviso de mantenimiento:', err.message);
+      socket.emit('resultado-mantenimiento', { ok: false, error: 'Error del servidor.' });
     }
   });
 

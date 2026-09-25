@@ -223,7 +223,7 @@
   }
   #emoji-picker span:hover { background: #f0f0f0; border-radius: 4px; }
 
-  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias, #panel-tecnicos-en-linea, #panel-administrar-tecnicos, #panel-avisos-conocidos, #panel-plantillas {
+  #faq-panel, #ticket-panel, #tickets-panel, #opciones-panel, #panel-tecnico, #panel-ia, #panel-reportes, #panel-conversacion-ticket, #panel-enviar-sugerencia, #panel-ver-sugerencias, #panel-tecnicos-en-linea, #panel-administrar-tecnicos, #panel-avisos-conocidos, #panel-plantillas, #panel-mantenimiento, #panel-generar-qr, #panel-auditoria {
     display: none;
     position: absolute;
     bottom: 60px;
@@ -553,6 +553,9 @@
   body.modo-oscuro #panel-ver-sugerencias,
   body.modo-oscuro #panel-tecnicos-en-linea,
   body.modo-oscuro #panel-administrar-tecnicos,
+  body.modo-oscuro #panel-mantenimiento,
+  body.modo-oscuro #panel-generar-qr,
+  body.modo-oscuro #panel-auditoria,
   body.modo-oscuro #panel-avisos-conocidos,
   body.modo-oscuro #panel-plantillas,
   body.modo-oscuro #opciones-panel {
@@ -644,6 +647,9 @@
   <div id="banner-estado-sistema" style="display:none; background:#fdeaea; color:#c62828; padding:8px 12px; font-size:12px; text-align:center; font-weight:bold;">
     ⚠️ <span id="texto-banner-estado"></span>
   </div>
+  <div id="banner-mantenimiento" style="display:none; background:#fff3cd; color:#856404; padding:8px 12px; font-size:12px; text-align:center; font-weight:bold;">
+    📅 <span id="texto-banner-mantenimiento"></span>
+  </div>
   <div id="mensajes"></div>
   <div id="escribiendo-indicador"></div>
 
@@ -659,6 +665,9 @@
   <div id="panel-ver-sugerencias"></div>
   <div id="panel-tecnicos-en-linea"></div>
   <div id="panel-administrar-tecnicos"></div>
+  <div id="panel-mantenimiento"></div>
+  <div id="panel-generar-qr"></div>
+  <div id="panel-auditoria"></div>
   <div id="panel-avisos-conocidos"></div>
   <div id="panel-plantillas"></div>
   <div id="opciones-panel"></div>
@@ -726,6 +735,17 @@
   const inputCargo = document.getElementById('input-cargo');
   const inputExt = document.getElementById('input-ext');
   const btnEntrar = document.getElementById('btn-entrar');
+
+  // ---------- Codigo QR de un equipo: prellena el area y guarda el equipo para el ticket ----------
+  let equipoDesdeQR = null;
+  (function leerParametrosQR() {
+    const parametros = new URLSearchParams(window.location.search);
+    const areaQR = parametros.get('area');
+    const equipoQR = parametros.get('equipo');
+    if (areaQR) inputArea.value = areaQR;
+    if (equipoQR) equipoDesdeQR = equipoQR;
+  })();
+
   const mensajesDiv = document.getElementById('mensajes');
   const formMensaje = document.getElementById('form-mensaje');
   const inputMensaje = document.getElementById('input-mensaje');
@@ -744,6 +764,9 @@
   const panelVerSugerencias = document.getElementById('panel-ver-sugerencias');
   const panelTecnicosEnLinea = document.getElementById('panel-tecnicos-en-linea');
   const panelAdministrarTecnicos = document.getElementById('panel-administrar-tecnicos');
+  const panelMantenimiento = document.getElementById('panel-mantenimiento');
+  const panelGenerarQR = document.getElementById('panel-generar-qr');
+  const panelAuditoria = document.getElementById('panel-auditoria');
   const panelAvisosConocidos = document.getElementById('panel-avisos-conocidos');
   const panelPlantillas = document.getElementById('panel-plantillas');
 
@@ -816,6 +839,24 @@
   }
   revisarEstadoSistema();
   setInterval(revisarEstadoSistema, 60000);
+
+  // ---------- Aviso de mantenimiento programado (banner arriba, si hay uno vigente) ----------
+  function formatearFechaCorta(fechaIso) {
+    const fecha = new Date(fechaIso);
+    return fecha.toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+  socket.on('mantenimiento-vigente', (aviso) => {
+    const banner = document.getElementById('banner-mantenimiento');
+    const texto = document.getElementById('texto-banner-mantenimiento');
+    if (aviso) {
+      texto.textContent = `${aviso.mensaje} (${formatearFechaCorta(aviso.fechaInicio)} a ${formatearFechaCorta(aviso.fechaFin)})`;
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
+  });
+  socket.emit('obtener-mantenimiento-vigente');
+  setInterval(() => socket.emit('obtener-mantenimiento-vigente'), 60000);
 
   function esNombreDeTecnico(nombre) {
     const normalizado = nombre.trim().toLowerCase();
@@ -1002,7 +1043,7 @@
   });
 
   function cerrarPaneles(excepto) {
-    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias, panelTecnicosEnLinea, panelAdministrarTecnicos, panelAvisosConocidos, panelPlantillas].forEach((panel) => {
+    [emojiPicker, faqPanel, ticketPanel, ticketsPanel, opcionesPanel, panelTecnico, panelIA, panelReportes, panelConversacionTicket, panelEnviarSugerencia, panelVerSugerencias, panelTecnicosEnLinea, panelAdministrarTecnicos, panelAvisosConocidos, panelPlantillas, panelMantenimiento, panelGenerarQR, panelAuditoria].forEach((panel) => {
       if (panel !== excepto) panel.style.display = 'none';
     });
   }
@@ -1064,12 +1105,15 @@
       opciones.push({ icono: '🧠', texto: 'Respuestas de la IA', accion: () => abrirPanel(panelIA, () => socket.emit('obtener-respuestas-ia')) });
       opciones.push({ icono: '📢', texto: 'Problemas conocidos', accion: () => abrirPanel(panelAvisosConocidos, () => socket.emit('obtener-avisos-conocidos')) });
       opciones.push({ icono: '⚡', texto: 'Respuestas rápidas', accion: () => { modoListaPlantillas = 'panel'; abrirPanel(panelPlantillas, () => socket.emit('obtener-plantillas')); } });
+      opciones.push({ icono: '📅', texto: 'Mantenimiento programado', accion: () => abrirPanel(panelMantenimiento, () => socket.emit('obtener-avisos-mantenimiento')) });
+      opciones.push({ icono: '🔲', texto: 'Generar código QR', accion: () => abrirPanel(panelGenerarQR, construirPanelGenerarQR) });
     }
 
     if (esSoporteTecnico && puedeVerReportes()) {
       opciones.push({ icono: '📊', texto: 'Reportes', accion: () => abrirPanel(panelReportes, () => socket.emit('obtener-metricas', { nombre: miNombre })) });
       opciones.push({ icono: '📬', texto: 'Sugerencias recibidas', accion: () => abrirPanel(panelVerSugerencias, () => socket.emit('obtener-sugerencias')) });
       opciones.push({ icono: '👤', texto: 'Administrar técnicos', accion: () => abrirPanel(panelAdministrarTecnicos, () => socket.emit('obtener-tecnicos-administrar')) });
+      opciones.push({ icono: '🧾', texto: 'Historial de cambios', accion: () => abrirPanel(panelAuditoria, () => socket.emit('obtener-auditoria')) });
     }
 
     if (preguntas) {
@@ -1358,6 +1402,10 @@
       } else {
         descripcion = textoExtra;
         if (!descripcion) return;
+      }
+
+      if (equipoDesdeQR) {
+        descripcion = `Equipo (código QR): ${equipoDesdeQR} | ${descripcion}`;
       }
 
       socket.emit('crear-ticket', {
@@ -2341,6 +2389,196 @@
       alert(resultado.error || 'No se pudo completar la acción.');
     }
   });
+
+  // ---------- Mantenimiento programado ----------
+  function construirPanelMantenimiento(avisos) {
+    panelMantenimiento.innerHTML = '';
+
+    if (avisos === null) {
+      panelMantenimiento.innerHTML = '<div class="faq-titulo">No tienes autorización para ver esta sección.</div>';
+      agregarBotonVolver(panelMantenimiento);
+      return;
+    }
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = '📅 Mantenimiento programado';
+    panelMantenimiento.appendChild(titulo);
+
+    const activos = avisos.filter((a) => a.activo && new Date(a.fechaFin) >= new Date());
+    if (activos.length === 0) {
+      const vacio = document.createElement('div');
+      vacio.classList.add('faq-titulo');
+      vacio.textContent = 'No hay avisos de mantenimiento programados.';
+      panelMantenimiento.appendChild(vacio);
+    }
+    activos.forEach((aviso) => {
+      const item = document.createElement('div');
+      item.classList.add('item-ticket');
+      item.innerHTML = `
+        <div class="fila-superior"><strong>${escaparHTML(aviso.mensaje)}</strong></div>
+        <div class="descripcion-ticket">${new Date(aviso.fechaInicio).toLocaleString('es-CO')} → ${new Date(aviso.fechaFin).toLocaleString('es-CO')}</div>
+        <div class="descripcion-ticket" style="color:#999; font-size:11px;">Creado por ${escaparHTML(aviso.creadoPor || 'N/A')}</div>
+      `;
+      const botonCancelar = document.createElement('button');
+      botonCancelar.type = 'button';
+      botonCancelar.textContent = '🗑️ Cancelar';
+      botonCancelar.style.cssText = 'background:#e53935; color:white; margin-top:6px; padding:6px 10px; font-size:12px; border:none; border-radius:6px; cursor:pointer;';
+      botonCancelar.addEventListener('click', () => {
+        socket.emit('desactivar-aviso-mantenimiento', { id: aviso._id });
+      });
+      item.appendChild(botonCancelar);
+      panelMantenimiento.appendChild(item);
+    });
+
+    const separador = document.createElement('div');
+    separador.style.cssText = 'border-top:1px dashed #ccc; margin:12px 0 8px; padding-top:8px; font-size:13px; color:#555; font-weight:bold;';
+    separador.textContent = 'Programar un mantenimiento';
+    panelMantenimiento.appendChild(separador);
+
+    const inputMensajeMant = document.createElement('textarea');
+    inputMensajeMant.rows = 2;
+    inputMensajeMant.placeholder = 'Ej: El sistema estará en mantenimiento';
+    panelMantenimiento.appendChild(inputMensajeMant);
+
+    const etiquetaInicio = document.createElement('div');
+    etiquetaInicio.textContent = 'Inicio';
+    etiquetaInicio.style.cssText = 'font-size:12px; color:#555; margin-top:6px;';
+    panelMantenimiento.appendChild(etiquetaInicio);
+    const inputInicio = document.createElement('input');
+    inputInicio.type = 'datetime-local';
+    inputInicio.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-bottom:6px;';
+    panelMantenimiento.appendChild(inputInicio);
+
+    const etiquetaFin = document.createElement('div');
+    etiquetaFin.textContent = 'Fin';
+    etiquetaFin.style.cssText = 'font-size:12px; color:#555;';
+    panelMantenimiento.appendChild(etiquetaFin);
+    const inputFin = document.createElement('input');
+    inputFin.type = 'datetime-local';
+    inputFin.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-bottom:6px;';
+    panelMantenimiento.appendChild(inputFin);
+
+    const botonCrearMant = document.createElement('button');
+    botonCrearMant.type = 'button';
+    botonCrearMant.textContent = '📅 Programar';
+    botonCrearMant.classList.add('boton-enviar-ticket');
+    botonCrearMant.addEventListener('click', () => {
+      if (!inputMensajeMant.value.trim() || !inputInicio.value || !inputFin.value) {
+        alert('Completa el mensaje y las fechas de inicio y fin.');
+        return;
+      }
+      socket.emit('crear-aviso-mantenimiento', {
+        mensaje: inputMensajeMant.value.trim(),
+        fechaInicio: inputInicio.value,
+        fechaFin: inputFin.value
+      });
+    });
+    panelMantenimiento.appendChild(botonCrearMant);
+
+    agregarBotonVolver(panelMantenimiento);
+  }
+
+  socket.on('lista-avisos-mantenimiento', (avisos) => construirPanelMantenimiento(avisos));
+  socket.on('resultado-mantenimiento', (resultado) => {
+    if (resultado.ok) {
+      alert(resultado.mensaje || 'Listo.');
+      socket.emit('obtener-avisos-mantenimiento');
+      socket.emit('obtener-mantenimiento-vigente');
+    } else {
+      alert(resultado.error || 'No se pudo completar la acción.');
+    }
+  });
+
+  // ---------- Generar codigo QR para un equipo ----------
+  function construirPanelGenerarQR() {
+    panelGenerarQR.innerHTML = '';
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = '🔲 Generar código QR para un equipo';
+    panelGenerarQR.appendChild(titulo);
+
+    const explicacion = document.createElement('div');
+    explicacion.style.cssText = 'font-size:12px; color:#888; margin-bottom:8px;';
+    explicacion.textContent = 'Pega esto en el equipo. Al escanearlo desde el celular, se abre el chat con el área y el equipo ya identificados.';
+    panelGenerarQR.appendChild(explicacion);
+
+    const inputAreaQR = document.createElement('input');
+    inputAreaQR.type = 'text';
+    inputAreaQR.placeholder = 'Área (ej: Laboratorio)';
+    inputAreaQR.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-bottom:6px;';
+    panelGenerarQR.appendChild(inputAreaQR);
+
+    const inputEquipoQR = document.createElement('input');
+    inputEquipoQR.type = 'text';
+    inputEquipoQR.placeholder = 'Nombre o código del equipo (ej: PC-Laboratorio-03)';
+    inputEquipoQR.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-bottom:6px;';
+    panelGenerarQR.appendChild(inputEquipoQR);
+
+    const contenedorResultado = document.createElement('div');
+    contenedorResultado.style.cssText = 'text-align:center; margin-top:10px;';
+    panelGenerarQR.appendChild(contenedorResultado);
+
+    const botonGenerar = document.createElement('button');
+    botonGenerar.type = 'button';
+    botonGenerar.textContent = '🔲 Generar';
+    botonGenerar.classList.add('boton-enviar-ticket');
+    botonGenerar.addEventListener('click', () => {
+      const area = inputAreaQR.value.trim();
+      const equipo = inputEquipoQR.value.trim();
+      if (!area || !equipo) { alert('Completa el área y el equipo.'); return; }
+
+      const url = `${window.location.origin}/?area=${encodeURIComponent(area)}&equipo=${encodeURIComponent(equipo)}`;
+      const urlQR = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(url)}`;
+
+      contenedorResultado.innerHTML = `
+        <img src="${urlQR}" alt="Código QR" style="border:1px solid #ccc; border-radius:6px;">
+        <div style="font-size:11px; color:#888; margin-top:6px; word-break:break-all;">${escaparHTML(url)}</div>
+        <a href="${urlQR}" download="qr-${equipo}.png" style="display:inline-block; margin-top:8px; font-size:12px; color:#0B4F6C;">⬇️ Descargar imagen</a>
+      `;
+    });
+    panelGenerarQR.appendChild(botonGenerar);
+
+    agregarBotonVolver(panelGenerarQR);
+  }
+
+  // ---------- Historial de cambios administrativos ----------
+  function construirPanelAuditoria(registros) {
+    panelAuditoria.innerHTML = '';
+
+    if (registros === null) {
+      panelAuditoria.innerHTML = '<div class="faq-titulo">No tienes autorización para ver esta sección.</div>';
+      agregarBotonVolver(panelAuditoria);
+      return;
+    }
+
+    const titulo = document.createElement('div');
+    titulo.classList.add('faq-titulo');
+    titulo.textContent = `🧾 Historial de cambios (${registros.length})`;
+    panelAuditoria.appendChild(titulo);
+
+    if (registros.length === 0) {
+      const vacio = document.createElement('div');
+      vacio.classList.add('faq-titulo');
+      vacio.textContent = 'Todavía no hay ningún cambio registrado.';
+      panelAuditoria.appendChild(vacio);
+    }
+
+    registros.forEach((r) => {
+      const item = document.createElement('div');
+      item.classList.add('item-ticket');
+      item.innerHTML = `
+        <div class="fila-superior"><strong>${escaparHTML(r.accion)}</strong></div>
+        <div class="descripcion-ticket">${escaparHTML(r.detalle)}</div>
+        <div class="descripcion-ticket" style="color:#999; font-size:11px;">${escaparHTML(r.realizadoPor)} — ${new Date(r.fecha).toLocaleString('es-CO')}</div>
+      `;
+      panelAuditoria.appendChild(item);
+    });
+
+    agregarBotonVolver(panelAuditoria);
+  }
+  socket.on('lista-auditoria', (registros) => construirPanelAuditoria(registros));
 
   // ---------- Avisos de problemas conocidos ----------
   function construirPanelAvisosConocidos(avisos) {
