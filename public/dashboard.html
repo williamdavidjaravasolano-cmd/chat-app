@@ -205,6 +205,7 @@
   }
 
   @media (max-width: 800px) {
+    .grid-monitoreo { grid-template-columns: 1fr !important; }
     table, thead, tbody, th, td, tr { display: block; }
     thead { display: none; }
     tr { background: white; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 8px; }
@@ -297,18 +298,24 @@
   </div>
 
   <div class="contenedor">
-    <div id="panel-estado-sistema" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <div style="font-size:13px; color:#555; font-weight:bold;">📡 Estado del sistema</div>
-        <a href="/estado.html" target="_blank" style="font-size:11px; color:#0B4F6C;">Ver página completa ↗</a>
+    <div style="font-size:12px; font-weight:bold; color:#0B4F6C; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">📡 Monitoreo</div>
+
+    <div class="grid-monitoreo" style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:16px;">
+      <div id="panel-estado-sistema" style="background:white; border-radius:10px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-size:13px; color:#555; font-weight:bold;">📡 Estado del sistema</div>
+          <a href="/estado.html" target="_blank" style="font-size:11px; color:#0B4F6C;">Ver más ↗</a>
+        </div>
+        <div id="lista-estado-servicios" style="display:flex; gap:10px; flex-wrap:wrap;"></div>
       </div>
-      <div id="lista-estado-servicios" style="display:flex; gap:10px; flex-wrap:wrap;"></div>
+
+      <div id="panel-tecnicos-en-linea-dash" style="background:white; border-radius:10px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:8px;">🟢 Técnicos en línea</div>
+        <div id="lista-tecnicos-en-linea-dash" style="font-size:13px;"></div>
+      </div>
     </div>
 
-    <div id="panel-tecnicos-en-linea-dash" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:8px;">🟢 Técnicos en línea</div>
-      <div id="lista-tecnicos-en-linea-dash" style="font-size:13px;"></div>
-    </div>
+    <div style="font-size:12px; font-weight:bold; color:#0B4F6C; text-transform:uppercase; letter-spacing:0.5px; margin:20px 0 8px;">🎫 Gestión de tickets</div>
 
     <div id="grafico-resumen"></div>
     <div class="tarjetas" id="tarjetas-resumen"></div>
@@ -806,7 +813,9 @@
       const filaResumen = `
         <tr class="fila-resumen ${atrasado ? 'fila-atrasada' : ''}" data-fila-resumen="${escaparHTML(t.numero)}" data-accion="expandir" data-numero="${escaparHTML(t.numero)}">
           <td data-etiqueta="Ticket"><span class="flecha-expandir">▶</span> <strong>#${escaparHTML(t.numero)}</strong></td>
-          <td data-etiqueta="Asunto">${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(asunto)}${cuentaRegresivaHtml}</td>
+          <td data-etiqueta="Asunto">${escaparHTML(asunto)}${cuentaRegresivaHtml}</td>
+          <td data-etiqueta="Categoría">${escaparHTML(t.categoria)}<div style="font-size:11px; color:#888;">${escaparHTML(tipoServicio)}</div></td>
+          <td data-etiqueta="Prioridad">${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</td>
           <td data-etiqueta="Reportado por">${escaparHTML(t.nombre)}</td>
           <td data-etiqueta="Fecha">${fecha}</td>
           <td data-etiqueta="Estado"><span class="badge ${claseBadge}">${escaparHTML(t.estado)}</span></td>
@@ -816,9 +825,9 @@
 
       const filaDetalle = `
         <tr class="fila-detalle" data-fila-detalle="${escaparHTML(t.numero)}" style="display:none;">
-          <td colspan="6">
+          <td colspan="8">
             ${badgeAtrasoDetalle}
-            <div style="margin-bottom:4px;"><strong>Tipo de servicio:</strong> ${escaparHTML(tipoServicio)} (tiempo oficial de atención: ${textoSla}${cuentaRegresiva ? ` — <span style="font-weight:bold; color:${cuentaRegresiva.color};">${cuentaRegresiva.texto}</span>` : ''}) &nbsp;·&nbsp; <strong>Categoría:</strong> ${escaparHTML(t.categoria)} &nbsp;·&nbsp; <strong>Prioridad:</strong> ${iconosPrioridad[prioridad] || '🟡'} ${escaparHTML(prioridad)}</div>
+            <div style="margin-bottom:4px;"><strong>Tiempo oficial de atención:</strong> ${textoSla}${cuentaRegresiva ? ` — <span style="font-weight:bold; color:${cuentaRegresiva.color};">${cuentaRegresiva.texto}</span>` : ''}</div>
             <div style="margin-bottom:4px;"><strong>Área / Cargo / Ext:</strong> ${escaparHTML(t.area || 'N/A')} · ${escaparHTML(t.cargo || 'N/A')} · ${escaparHTML(t.extension || 'N/A')}</div>
             <div style="margin-bottom:4px;"><strong>Incidencia completa:</strong> ${escaparHTML(t.descripcion)}${imagenHtml}</div>
             <div class="acciones-fila" style="flex-direction:row; margin-top:8px;">${botonesAccion}</div>
@@ -835,6 +844,8 @@
           <tr>
             <th>Ticket</th>
             <th>Asunto</th>
+            <th>Categoría</th>
+            <th>Prioridad</th>
             <th>Reportado por</th>
             <th>Fecha</th>
             <th>Estado</th>
