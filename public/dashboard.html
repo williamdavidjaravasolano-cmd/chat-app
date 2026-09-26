@@ -140,7 +140,6 @@
     font-size: 13px;
   }
   #btn-actualizar { background: #0B4F6C; color: white; }
-  #btn-exportar { background: #217346; color: white; }
 
   table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
   th, td { padding: 10px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid #eee; vertical-align: top; }
@@ -282,10 +281,11 @@
 
 <div id="dashboard">
   <header>
-    <h1>📋 Panel de Tickets</h1>
+    <h1>🛠️ Panel de Técnicos</h1>
     <div class="info-derecha">
       <span id="usuario-conectado"></span>
       <span class="actualizado" id="ultima-actualizacion">Cargando...</span>
+      <a id="link-panel-admin" href="/admin.html" style="display:none; background:rgba(255,255,255,0.15); color:white; border-radius:6px; padding:6px 10px; font-size:12px; text-decoration:none;">🔑 Panel de Administración</a>
       <button id="btn-actualizar-todo" title="Actualizar toda la plataforma (recarga la página completa)">🔄 Actualizar todo</button>
       <button id="btn-modo-oscuro-dash" title="Modo oscuro">🌙</button>
       <button id="btn-salir">Salir</button>
@@ -297,8 +297,6 @@
   </div>
 
   <div class="contenedor">
-    <div style="font-size:12px; font-weight:bold; color:#0B4F6C; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">🛠️ Técnico</div>
-
     <div id="panel-estado-sistema" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <div style="font-size:13px; color:#555; font-weight:bold;">📡 Estado del sistema</div>
@@ -311,27 +309,6 @@
       <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:8px;">🟢 Técnicos en línea</div>
       <div id="lista-tecnicos-en-linea-dash" style="font-size:13px;"></div>
     </div>
-
-    <div id="seccion-admin-dashboard" style="display:none;">
-      <div style="font-size:12px; font-weight:bold; color:#0B4F6C; text-transform:uppercase; letter-spacing:0.5px; margin:18px 0 8px;">🔑 Administrador</div>
-
-      <div id="panel-top-problemas" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:8px;">🔝 Problemas más comunes este mes</div>
-        <div id="lista-top-problemas" style="font-size:13px;"></div>
-      </div>
-
-      <div id="calificacion-tecnicos"></div>
-
-      <div id="panel-auditoria-dash" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <div style="font-size:13px; color:#555; font-weight:bold;">🧾 Historial de cambios administrativos</div>
-          <button id="btn-toggle-auditoria" style="font-size:11px; background:none; border:none; color:#0B4F6C; cursor:pointer;">Mostrar/ocultar</button>
-        </div>
-        <div id="lista-auditoria-dash" style="font-size:12px; max-height:260px; overflow-y:auto; display:none;"></div>
-      </div>
-    </div>
-
-    <div style="font-size:12px; font-weight:bold; color:#0B4F6C; text-transform:uppercase; letter-spacing:0.5px; margin:18px 0 8px;">🛠️ Técnico</div>
 
     <div id="grafico-resumen"></div>
     <div class="tarjetas" id="tarjetas-resumen"></div>
@@ -368,7 +345,6 @@
         <input type="text" id="busqueda-dashboard" placeholder="Número, nombre, palabra clave..." style="min-width:180px;">
       </div>
       <button id="btn-actualizar">🔄 Actualizar ahora</button>
-      <button id="btn-exportar">📥 Exportar a Excel</button>
     </div>
 
     <div id="contenedor-tabla"></div>
@@ -537,24 +513,17 @@
     pantallaClave.style.display = 'none';
     dashboard.style.display = 'block';
     usuarioConectado.textContent = '👤 ' + usuarioActual;
-    document.getElementById('btn-exportar').style.display = puedeVerReportes() ? 'inline-block' : 'none';
+    document.getElementById('link-panel-admin').style.display = puedeVerReportes() ? 'inline-block' : 'none';
   }
-
-  let todasLasSugerencias = [];
 
   async function cargarTodo(mostrarErrorSiFalla = true) {
     try {
-      const peticiones = [
+      const [respuestaTickets, respuestaTecnicos] = await Promise.all([
         fetch('/api/tickets', { headers: cabecerasAuth() }),
         fetch('/api/tecnicos', { headers: cabecerasAuth() })
-      ];
-      if (puedeVerReportes()) {
-        peticiones.push(fetch('/api/sugerencias', { headers: cabecerasAuth() }));
-      }
-      const respuestas = await Promise.all(peticiones);
-      const [respuestaTickets, respuestaTecnicos, respuestaSugerencias] = respuestas;
+      ]);
 
-      if (respuestas.some((r) => r.status === 401)) {
+      if (respuestaTickets.status === 401 || respuestaTecnicos.status === 401) {
         sessionStorage.removeItem('dashboardUsuario');
         sessionStorage.removeItem('dashboardClave');
         mostrarPantallaClave('Tu sesión expiró o no es válida. Entra de nuevo.');
@@ -563,7 +532,6 @@
 
       todosLosTickets = await respuestaTickets.json();
       listaTecnicos = await respuestaTecnicos.json();
-      todasLasSugerencias = respuestaSugerencias ? await respuestaSugerencias.json() : [];
       mostrarDashboard();
       construirFiltroTecnicos();
       renderizarTodo();
@@ -737,64 +705,6 @@
     });
   }
 
-  // Calificacion de cada tecnico, combinando las estrellas de tickets resueltos
-  // y las del buzon de sugerencias. Solo se calcula y muestra si el usuario puede ver Reportes.
-  function renderizarCalificacionTecnicos(tickets) {
-    const contenedor = document.getElementById('calificacion-tecnicos');
-    if (!puedeVerReportes()) {
-      contenedor.innerHTML = '';
-      return;
-    }
-
-    const sumaPorTecnico = {};
-    const conteoPorTecnico = {};
-
-    function agregar(tecnico, calificacion) {
-      if (!tecnico || calificacion == null) return;
-      sumaPorTecnico[tecnico] = (sumaPorTecnico[tecnico] || 0) + calificacion;
-      conteoPorTecnico[tecnico] = (conteoPorTecnico[tecnico] || 0) + 1;
-    }
-
-    tickets.forEach((t) => agregar(t.tecnicoAsignado, t.calificacion));
-    todasLasSugerencias.forEach((s) => agregar(s.tecnicoCalificado, s.calificacion));
-
-    const tecnicosConDatos = Object.keys(conteoPorTecnico);
-    if (tecnicosConDatos.length === 0) {
-      contenedor.innerHTML = `
-        <div style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-          <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:6px;">⭐ Calificación de los técnicos</div>
-          <div style="font-size:13px; color:#888;">Todavía no hay calificaciones (ni de tickets resueltos, ni del buzón de sugerencias).</div>
-        </div>
-      `;
-      return;
-    }
-
-    const filas = tecnicosConDatos
-      .map((tecnico) => ({ tecnico, promedio: sumaPorTecnico[tecnico] / conteoPorTecnico[tecnico], total: conteoPorTecnico[tecnico] }))
-      .sort((a, b) => b.promedio - a.promedio)
-      .map(({ tecnico, promedio, total }) => {
-        const porcentaje = (promedio / 5) * 100;
-        return `
-          <div style="margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:3px;">
-              <span>${escaparHTML(tecnico)}</span>
-              <span>${'⭐'.repeat(Math.round(promedio))}${'☆'.repeat(5 - Math.round(promedio))} ${promedio.toFixed(1)} (${total})</span>
-            </div>
-            <div style="background:#eee; border-radius:6px; height:10px; overflow:hidden;">
-              <div style="background:#f5a623; height:100%; width:${porcentaje}%;"></div>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-    contenedor.innerHTML = `
-      <div style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:10px;">⭐ Calificación de los técnicos <span style="font-weight:normal; color:#999;">(tickets + buzón de sugerencias)</span></div>
-        ${filas}
-      </div>
-    `;
-  }
-
   function renderizarTarjetas(tickets) {
     const total = tickets.length;
     const resueltos = tickets.filter((t) => t.estado === 'Resuelto').length;
@@ -803,7 +713,6 @@
     const atrasados = tickets.filter(estaAtrasado).length;
 
     renderizarGraficoResumen(tickets);
-    renderizarCalificacionTecnicos(tickets);
 
     tarjetasResumen.innerHTML = `
       <div class="tarjeta ${filtroRapido === null ? 'activa' : ''}" data-filtro=""><div class="numero">${total}</div><div class="etiqueta">Total</div></div>
@@ -1042,34 +951,6 @@
     }
   });
 
-  document.getElementById('btn-exportar').addEventListener('click', () => {
-    if (!puedeVerReportes()) { alert('No tienes autorización para exportar reportes.'); return; }
-    const tickets = obtenerTicketsFiltrados();
-    if (tickets.length === 0) { alert('No hay tickets para exportar con el filtro actual.'); return; }
-
-    const encabezados = ['Ticket', 'Tipo de servicio', 'Categoría', 'Prioridad', 'Estado', 'Creado por', 'Área', 'Cargo', 'Extensión', 'Incidencia', 'Técnico asignado', 'Solución', 'Fecha creación'];
-    const filas = tickets.map((t) => [
-      t.numero, t.tipoServicio || 'Incidente', t.categoria, t.prioridad || 'Media', t.estado, t.nombre, t.area || '', t.cargo || '', t.extension || '',
-      t.descripcion, t.tecnicoAsignado || 'Sin asignar', t.solucion || '',
-      t.fechaCreacion ? new Date(t.fechaCreacion).toLocaleString('es-CO') : ''
-    ]);
-
-    function celdaCSV(valor) {
-      const texto = String(valor == null ? '' : valor).replace(/"/g, '""');
-      return `"${texto}"`;
-    }
-
-    const contenidoCSV = [encabezados, ...filas]
-      .map((fila) => fila.map(celdaCSV).join(','))
-      .join('\r\n');
-
-    const blob = new Blob(['\uFEFF' + contenidoCSV], { type: 'text/csv;charset=utf-8;' });
-    const enlace = document.createElement('a');
-    enlace.href = URL.createObjectURL(blob);
-    enlace.download = `tickets-soporte-tecnico-${new Date().toISOString().slice(0, 10)}.csv`;
-    enlace.click();
-  });
-
   setInterval(() => cargarTodo(false), 20000);
 
   // ---------- Panel fijo de estado del sistema (siempre visible) ----------
@@ -1140,60 +1021,6 @@
   }
   revisarMantenimientoDash();
   setInterval(revisarMantenimientoDash, 60000);
-
-  // ---------- Top de problemas mas comunes (solo con permiso de Reportes) ----------
-  async function cargarTopProblemas() {
-    if (!puedeVerReportes()) return;
-    document.getElementById('seccion-admin-dashboard').style.display = 'block';
-    const panel = document.getElementById('panel-top-problemas');
-    const contenedor = document.getElementById('lista-top-problemas');
-    panel.style.display = 'block';
-    try {
-      const respuesta = await fetch('/api/top-problemas', { headers: cabecerasAuth() });
-      const problemas = await respuesta.json();
-      if (!Array.isArray(problemas) || problemas.length === 0) {
-        contenedor.innerHTML = '<span style="color:#888;">Todavía no hay suficientes casos este mes.</span>';
-        return;
-      }
-      contenedor.innerHTML = problemas.map((p, i) => `
-        <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #eee;">
-          <span>${i + 1}. [${escaparHTML(p.categoria)}] ${escaparHTML(p.descripcion.length > 60 ? p.descripcion.slice(0, 60) + '…' : p.descripcion)}</span>
-          <strong style="margin-left:8px; white-space:nowrap;">${p.total}×</strong>
-        </div>
-      `).join('');
-    } catch (err) {
-      contenedor.innerHTML = '<span style="color:#888;">No se pudo consultar.</span>';
-    }
-  }
-  cargarTopProblemas();
-
-  // ---------- Historial de cambios administrativos (solo con permiso de Reportes) ----------
-  async function cargarAuditoriaDash() {
-    if (!puedeVerReportes()) return;
-    document.getElementById('panel-auditoria-dash').style.display = 'block';
-    const contenedor = document.getElementById('lista-auditoria-dash');
-    try {
-      const respuesta = await fetch('/api/auditoria', { headers: cabecerasAuth() });
-      const registros = await respuesta.json();
-      if (!Array.isArray(registros) || registros.length === 0) {
-        contenedor.innerHTML = '<span style="color:#888;">Todavía no hay ningún cambio registrado.</span>';
-        return;
-      }
-      contenedor.innerHTML = registros.map((r) => `
-        <div style="padding:6px 0; border-bottom:1px solid #eee;">
-          <strong>${escaparHTML(r.accion)}</strong> — ${escaparHTML(r.detalle)}<br>
-          <span style="color:#999; font-size:11px;">${escaparHTML(r.realizadoPor)} · ${new Date(r.fecha).toLocaleString('es-CO')}</span>
-        </div>
-      `).join('');
-    } catch (err) {
-      contenedor.innerHTML = '<span style="color:#888;">No se pudo consultar.</span>';
-    }
-  }
-  cargarAuditoriaDash();
-  document.getElementById('btn-toggle-auditoria').addEventListener('click', () => {
-    const lista = document.getElementById('lista-auditoria-dash');
-    lista.style.display = lista.style.display === 'none' ? 'block' : 'none';
-  });
 
   if (usuarioActual && claveActual) {
     cargarTodo();

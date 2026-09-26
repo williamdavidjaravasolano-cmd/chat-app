@@ -60,6 +60,29 @@ async function verificarCredencialesDashboard(req, res, next) {
   }
 }
 
+// Igual que verificarCredencialesDashboard, pero ademas exige que la persona sea
+// administrador (Hector o William David). Se usa para todo lo del Panel de
+// Administracion, para que un tecnico normal NUNCA pueda entrar ahi, ni siquiera
+// llamando directamente a la API.
+async function verificarCredencialesAdmin(req, res, next) {
+  const usuario = req.headers['x-dashboard-usuario'];
+  const clave = req.headers['x-dashboard-clave'];
+  try {
+    const tecnico = usuario ? await Tecnico.findOne({ nombre: usuario }) : null;
+    if (!tecnico || tecnico.clave !== clave) {
+      return res.status(401).json({ error: 'Usuario o clave incorrectos' });
+    }
+    if (!puedeVerReportes(usuario)) {
+      return res.status(403).json({ error: 'No tienes permisos de administrador.' });
+    }
+    req.tecnicoDashboard = usuario;
+    next();
+  } catch (err) {
+    console.error('Error verificando credenciales de administrador:', err.message);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+}
+
 // ---------- Conexion a MongoDB Atlas ----------
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -186,6 +209,25 @@ app.post('/api/dashboard-login', async (req, res) => {
     res.json({ ok: true, tecnico: usuario, debeCambiarClave: !tecnico.claveCambiada });
   } catch (err) {
     console.error('Error en /api/dashboard-login:', err.message);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// Login especifico del Panel de Administracion: igual que el del dashboard, pero
+// ademas rechaza a cualquiera que no sea administrador (Hector o William David).
+app.post('/api/admin-login', async (req, res) => {
+  const { usuario, clave } = req.body || {};
+  try {
+    const tecnico = usuario ? await Tecnico.findOne({ nombre: usuario }) : null;
+    if (!tecnico || tecnico.clave !== clave) {
+      return res.status(401).json({ error: 'Usuario o clave incorrectos' });
+    }
+    if (!puedeVerReportes(usuario)) {
+      return res.status(403).json({ error: 'Tu usuario no tiene permisos de administrador.' });
+    }
+    res.json({ ok: true, tecnico: usuario, debeCambiarClave: !tecnico.claveCambiada });
+  } catch (err) {
+    console.error('Error en /api/admin-login:', err.message);
     res.status(500).json({ error: 'Error del servidor' });
   }
 });
@@ -453,7 +495,7 @@ app.get('/api/mantenimiento-vigente', verificarCredencialesDashboard, async (req
 });
 
 // Devuelve las descripciones de ticket mas repetidas del mes (aproximacion a "problemas mas comunes")
-app.get('/api/top-problemas', verificarCredencialesDashboard, async (req, res) => {
+app.get('/api/top-problemas', verificarCredencialesAdmin, async (req, res) => {
   try {
     const inicioMes = new Date();
     inicioMes.setDate(1);
@@ -479,7 +521,7 @@ app.get('/api/top-problemas', verificarCredencialesDashboard, async (req, res) =
 });
 
 // Devuelve el historial de cambios administrativos (para el dashboard)
-app.get('/api/auditoria', verificarCredencialesDashboard, async (req, res) => {
+app.get('/api/auditoria', verificarCredencialesAdmin, async (req, res) => {
   try {
     const registros = await RegistroAuditoria.find({}).sort({ fecha: -1 }).limit(200);
     res.json(registros);
@@ -490,13 +532,55 @@ app.get('/api/auditoria', verificarCredencialesDashboard, async (req, res) => {
 });
 
 // Devuelve las sugerencias del buzon (para calcular calificaciones en el dashboard)
-app.get('/api/sugerencias', verificarCredencialesDashboard, async (req, res) => {
+app.get('/api/sugerencias', verificarCredencialesAdmin, async (req, res) => {
   try {
     const sugerencias = await Sugerencia.find({}).sort({ fecha: -1 });
     res.json(sugerencias);
   } catch (err) {
     console.error('Error en /api/sugerencias:', err.message);
     res.status(500).json({ error: 'Error obteniendo las sugerencias' });
+  }
+});
+
+// ---------- Administrar tecnicos, solo desde el Panel de Administracion ----------
+app.get('/api/tecnicos/administrar', verificarCredencialesAdmin, async (req, res) => {
+  try {
+    const registros = await Tecnico.find({}).sort({ nombre: 1 });
+    res.json(registros.map((r) => ({ nombre: r.nombre, claveCambiada: r.claveCambiada })));
+  } catch (err) {
+    console.error('Error en /api/tecnicos/administrar:', err.message);
+    res.status(500).json({ error: 'Error obteniendo los técnicos' });
+  }
+});
+
+app.post('/api/tecnicos/agregar', verificarCredencialesAdmin, async (req, res) => {
+  const nombreLimpio = (req.body.nombre || '').trim();
+  if (!nombreLimpio) return res.status(400).json({ error: 'Escribe un nombre.' });
+  try {
+    const existente = await Tecnico.findOne({ nombre: nombreLimpio });
+    if (existente) return res.status(400).json({ error: 'Ya existe un técnico con ese nombre.' });
+
+    await new Tecnico({ nombre: nombreLimpio, clave: CLAVE_GENERICA_INICIAL, claveCambiada: false }).save();
+    await sincronizarListaTecnicos();
+    await registrarAuditoria('Agregar técnico', `Técnico agregado: ${nombreLimpio}`, req.tecnicoDashboard);
+    res.json({ ok: true, mensaje: `${nombreLimpio} fue agregado. Su contraseña inicial es: ${CLAVE_GENERICA_INICIAL}` });
+  } catch (err) {
+    console.error('Error agregando tecnico (admin):', err.message);
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
+
+app.post('/api/tecnicos/quitar', verificarCredencialesAdmin, async (req, res) => {
+  const nombre = (req.body.nombre || '').trim();
+  if (!nombre) return res.status(400).json({ error: 'Falta el nombre del técnico.' });
+  try {
+    await Tecnico.deleteOne({ nombre });
+    await sincronizarListaTecnicos();
+    await registrarAuditoria('Quitar técnico', `Técnico quitado: ${nombre}`, req.tecnicoDashboard);
+    res.json({ ok: true, mensaje: `${nombre} fue quitado de los técnicos autorizados.` });
+  } catch (err) {
+    console.error('Error quitando tecnico (admin):', err.message);
+    res.status(500).json({ error: 'Error del servidor.' });
   }
 });
 

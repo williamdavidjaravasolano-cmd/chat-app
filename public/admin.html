@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de Administración</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔑</text></svg>">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f4f4f4;
+    color: #222;
+  }
+  #pantalla-clave {
+    max-width: 320px;
+    margin: 80px auto;
+    background: white;
+    border-radius: 10px;
+    padding: 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+  #pantalla-clave h2 { margin-top: 0; font-size: 18px; color: #0B4F6C; }
+  #pantalla-clave input {
+    width: 100%;
+    padding: 9px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  #pantalla-clave button {
+    width: 100%;
+    padding: 10px;
+    background: #0B4F6C;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #error-clave, #error-cambio-clave { color: #d32f2f; font-size: 12px; margin-bottom: 8px; }
+
+  header {
+    background: #0B4F6C;
+    color: white;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header .info-derecha { display: flex; align-items: center; gap: 14px; font-size: 12px; }
+  header a, header button {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    text-decoration: none;
+  }
+
+  .contenedor { padding: 16px; max-width: 900px; margin: 0 auto; }
+  .tarjeta {
+    background: white;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .tarjeta .titulo { font-size: 13px; color: #555; font-weight: bold; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .item {
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 13px;
+  }
+  .item:last-child { border-bottom: none; }
+  .item button {
+    background: #e53935;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-size: 11px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .tarjeta input, .tarjeta textarea {
+    width: 100%;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .tarjeta .boton-principal {
+    background: #0B4F6C;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .boton-exportar { background: #217346; color: white; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-size: 13px; }
+  .vacio { color: #888; font-size: 13px; }
+
+  body.modo-oscuro { background: #121212; color: #e6e6e6; }
+  body.modo-oscuro .tarjeta, body.modo-oscuro #pantalla-clave { background: #1e1e1e; }
+  body.modo-oscuro .tarjeta input, body.modo-oscuro .tarjeta textarea { background: #2a2a2a; color: #e6e6e6; border-color: #444; }
+  body.modo-oscuro .item { border-color: #333; }
+</style>
+</head>
+<body>
+
+<div id="pantalla-clave">
+  <h2>🔑 Panel de Administración</h2>
+  <div id="error-clave"></div>
+  <input type="text" id="input-usuario" placeholder="Usuario (tu nombre)">
+  <input type="password" id="input-clave" placeholder="Contraseña">
+  <button id="btn-entrar-clave">Entrar</button>
+
+  <div id="caja-cambio-clave" style="display:none;">
+    <h2 style="margin-top:16px;">🔒 Cambia tu contraseña</h2>
+    <p style="font-size:12px; color:#666; margin-top:-6px;">Es tu primer ingreso. Elige una contraseña personal.</p>
+    <div id="error-cambio-clave"></div>
+    <input type="password" id="input-clave-nueva" placeholder="Nueva contraseña (mínimo 6 caracteres)">
+    <input type="password" id="input-clave-nueva-confirmar" placeholder="Confirmar nueva contraseña">
+    <button id="btn-guardar-clave-nueva">Guardar y entrar</button>
+  </div>
+</div>
+
+<div id="admin" style="display:none;">
+  <header>
+    <h1>🔑 Panel de Administración</h1>
+    <div class="info-derecha">
+      <span id="usuario-conectado"></span>
+      <a href="/dashboard.html">🛠️ Panel de Técnicos</a>
+      <button id="btn-modo-oscuro">🌙</button>
+      <button id="btn-salir">Salir</button>
+    </div>
+  </header>
+
+  <div class="contenedor">
+    <div class="tarjeta">
+      <div class="titulo">🔝 Problemas más comunes este mes</div>
+      <div id="lista-top-problemas" class="vacio">Cargando...</div>
+    </div>
+
+    <div class="tarjeta">
+      <div class="titulo">⭐ Calificación de los técnicos <span style="font-weight:normal; color:#999; font-size:11px;">(tickets + buzón de sugerencias)</span></div>
+      <div id="lista-calificacion" class="vacio">Cargando...</div>
+    </div>
+
+    <div class="tarjeta">
+      <div class="titulo">👤 Administrar técnicos</div>
+      <div id="lista-tecnicos-admin" class="vacio">Cargando...</div>
+      <div style="border-top:1px dashed #ccc; margin:12px 0 10px; padding-top:10px; font-size:13px; font-weight:bold; color:#555;">Agregar un nuevo técnico</div>
+      <input type="text" id="input-nuevo-tecnico" placeholder="Nombre exacto (como lo escribirá al entrar)">
+      <button class="boton-principal" id="btn-agregar-tecnico">➕ Agregar técnico</button>
+    </div>
+
+    <div class="tarjeta">
+      <div class="titulo">📬 Sugerencias recibidas</div>
+      <div id="lista-sugerencias-admin" class="vacio">Cargando...</div>
+    </div>
+
+    <div class="tarjeta">
+      <div class="titulo">🧾 Historial de cambios administrativos</div>
+      <div id="lista-auditoria" class="vacio">Cargando...</div>
+    </div>
+
+    <div class="tarjeta">
+      <div class="titulo">📥 Exportar tickets</div>
+      <p style="font-size:12px; color:#888; margin-top:-4px;">Descarga todos los tickets registrados en un archivo Excel (.csv).</p>
+      <button class="boton-exportar" id="btn-exportar">📥 Exportar a Excel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const pantallaClave = document.getElementById('pantalla-clave');
+  const admin = document.getElementById('admin');
+  const errorClave = document.getElementById('error-clave');
+  const cajaCambioClave = document.getElementById('caja-cambio-clave');
+  const errorCambioClave = document.getElementById('error-cambio-clave');
+
+  let usuarioActual = sessionStorage.getItem('adminUsuario') || '';
+  let claveActual = sessionStorage.getItem('adminClave') || '';
+
+  function cabecerasAuth() {
+    return { 'x-dashboard-usuario': usuarioActual, 'x-dashboard-clave': claveActual, 'Content-Type': 'application/json' };
+  }
+
+  function escaparHTML(texto) {
+    const div = document.createElement('div');
+    div.textContent = texto == null ? '' : String(texto);
+    return div.innerHTML;
+  }
+
+  function mostrarPantallaClave(mensaje) {
+    pantallaClave.style.display = 'block';
+    admin.style.display = 'none';
+    if (mensaje) { errorClave.textContent = mensaje; }
+  }
+
+  function mostrarAdmin() {
+    pantallaClave.style.display = 'none';
+    admin.style.display = 'block';
+    document.getElementById('usuario-conectado').textContent = '👤 ' + usuarioActual;
+  }
+
+  document.getElementById('btn-entrar-clave').addEventListener('click', async () => {
+    const usuario = document.getElementById('input-usuario').value.trim();
+    const clave = document.getElementById('input-clave').value;
+    if (!usuario || !clave) { errorClave.textContent = 'Escribe tu usuario y contraseña.'; return; }
+
+    try {
+      const respuesta = await fetch('/api/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario, clave })
+      });
+      const datos = await respuesta.json();
+      if (!respuesta.ok) {
+        errorClave.textContent = datos.error || 'No se pudo entrar.';
+        return;
+      }
+      usuarioActual = usuario;
+      claveActual = clave;
+      errorClave.textContent = '';
+
+      if (datos.debeCambiarClave) {
+        cajaCambioClave.style.display = 'block';
+        return;
+      }
+      sessionStorage.setItem('adminUsuario', usuarioActual);
+      sessionStorage.setItem('adminClave', claveActual);
+      mostrarAdmin();
+      cargarTodo();
+    } catch (err) {
+      errorClave.textContent = 'No se pudo conectar con el servidor.';
+    }
+  });
+
+  document.getElementById('btn-guardar-clave-nueva').addEventListener('click', async () => {
+    const claveNueva = document.getElementById('input-clave-nueva').value;
+    const claveConfirmar = document.getElementById('input-clave-nueva-confirmar').value;
+    if (claveNueva.length < 6) { errorCambioClave.textContent = 'La contraseña debe tener al menos 6 caracteres.'; return; }
+    if (claveNueva !== claveConfirmar) { errorCambioClave.textContent = 'Las dos contraseñas no coinciden.'; return; }
+
+    try {
+      const respuesta = await fetch('/api/cambiar-clave-tecnico', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario: usuarioActual, claveActual, claveNueva })
+      });
+      const datos = await respuesta.json();
+      if (!respuesta.ok) { errorCambioClave.textContent = datos.error || 'No se pudo cambiar la contraseña.'; return; }
+
+      claveActual = claveNueva;
+      sessionStorage.setItem('adminUsuario', usuarioActual);
+      sessionStorage.setItem('adminClave', claveActual);
+      cajaCambioClave.style.display = 'none';
+      mostrarAdmin();
+      cargarTodo();
+    } catch (err) {
+      errorCambioClave.textContent = 'No se pudo conectar con el servidor.';
+    }
+  });
+
+  document.getElementById('btn-salir').addEventListener('click', () => {
+    sessionStorage.removeItem('adminUsuario');
+    sessionStorage.removeItem('adminClave');
+    usuarioActual = '';
+    claveActual = '';
+    mostrarPantallaClave();
+  });
+
+  const btnModoOscuro = document.getElementById('btn-modo-oscuro');
+  btnModoOscuro.addEventListener('click', () => {
+    document.body.classList.toggle('modo-oscuro');
+    localStorage.setItem('modoOscuroAdmin', document.body.classList.contains('modo-oscuro') ? '1' : '0');
+  });
+  if (localStorage.getItem('modoOscuroAdmin') === '1') document.body.classList.add('modo-oscuro');
+
+  let todosLosTickets = [];
+  let todasLasSugerencias = [];
+
+  async function cargarTodo() {
+    try {
+      const [rTop, rTecnicos, rSugerencias, rAuditoria, rTickets] = await Promise.all([
+        fetch('/api/top-problemas', { headers: cabecerasAuth() }),
+        fetch('/api/tecnicos/administrar', { headers: cabecerasAuth() }),
+        fetch('/api/sugerencias', { headers: cabecerasAuth() }),
+        fetch('/api/auditoria', { headers: cabecerasAuth() }),
+        fetch('/api/tickets', { headers: cabecerasAuth() })
+      ]);
+
+      if ([rTop, rTecnicos, rSugerencias, rAuditoria, rTickets].some((r) => r.status === 401 || r.status === 403)) {
+        sessionStorage.removeItem('adminUsuario');
+        sessionStorage.removeItem('adminClave');
+        mostrarPantallaClave('Tu sesión expiró, o tu usuario no tiene permisos de administrador.');
+        return;
+      }
+
+      renderizarTopProblemas(await rTop.json());
+      renderizarTecnicosAdmin(await rTecnicos.json());
+      todasLasSugerencias = await rSugerencias.json();
+      renderizarSugerencias(todasLasSugerencias);
+      renderizarAuditoria(await rAuditoria.json());
+      todosLosTickets = await rTickets.json();
+      renderizarCalificacion();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function renderizarTopProblemas(problemas) {
+    const contenedor = document.getElementById('lista-top-problemas');
+    if (!Array.isArray(problemas) || problemas.length === 0) {
+      contenedor.innerHTML = '<span class="vacio">Todavía no hay suficientes casos este mes.</span>';
+      return;
+    }
+    contenedor.innerHTML = problemas.map((p, i) => `
+      <div class="item" style="display:flex; justify-content:space-between;">
+        <span>${i + 1}. [${escaparHTML(p.categoria)}] ${escaparHTML(p.descripcion.length > 60 ? p.descripcion.slice(0, 60) + '…' : p.descripcion)}</span>
+        <strong style="margin-left:8px; white-space:nowrap;">${p.total}×</strong>
+      </div>
+    `).join('');
+  }
+
+  function renderizarCalificacion() {
+    const contenedor = document.getElementById('lista-calificacion');
+    const suma = {}, conteo = {};
+    function agregar(tecnico, calificacion) {
+      if (!tecnico || calificacion == null) return;
+      suma[tecnico] = (suma[tecnico] || 0) + calificacion;
+      conteo[tecnico] = (conteo[tecnico] || 0) + 1;
+    }
+    todosLosTickets.forEach((t) => agregar(t.tecnicoAsignado, t.calificacion));
+    todasLasSugerencias.forEach((s) => agregar(s.tecnicoCalificado, s.calificacion));
+
+    const conDatos = Object.keys(conteo);
+    if (conDatos.length === 0) {
+      contenedor.innerHTML = '<span class="vacio">Todavía no hay calificaciones.</span>';
+      return;
+    }
+    contenedor.innerHTML = conDatos
+      .map((t) => ({ tecnico: t, promedio: suma[t] / conteo[t], total: conteo[t] }))
+      .sort((a, b) => b.promedio - a.promedio)
+      .map(({ tecnico, promedio, total }) => `
+        <div style="margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:3px;">
+            <span>${escaparHTML(tecnico)}</span>
+            <span>${'⭐'.repeat(Math.round(promedio))}${'☆'.repeat(5 - Math.round(promedio))} ${promedio.toFixed(1)} (${total})</span>
+          </div>
+          <div style="background:#eee; border-radius:6px; height:10px; overflow:hidden;">
+            <div style="background:#f5a623; height:100%; width:${(promedio / 5) * 100}%;"></div>
+          </div>
+        </div>
+      `).join('');
+  }
+
+  function renderizarTecnicosAdmin(tecnicos) {
+    const contenedor = document.getElementById('lista-tecnicos-admin');
+    if (!Array.isArray(tecnicos) || tecnicos.length === 0) {
+      contenedor.innerHTML = '<span class="vacio">No hay técnicos registrados.</span>';
+      return;
+    }
+    contenedor.innerHTML = tecnicos.map((t) => `
+      <div class="item">
+        <strong>${escaparHTML(t.nombre)}</strong> —
+        ${t.claveCambiada ? '<span style="color:#4caf50;">✅ Ya cambió su contraseña</span>' : '<span style="color:#ff9800;">⏳ Aún usa la genérica</span>'}
+        <br><button data-nombre="${escaparHTML(t.nombre)}" class="btn-quitar-tecnico">🗑️ Quitar</button>
+      </div>
+    `).join('');
+    contenedor.querySelectorAll('.btn-quitar-tecnico').forEach((boton) => {
+      boton.addEventListener('click', async () => {
+        const nombre = boton.dataset.nombre;
+        if (!confirm(`¿Seguro que quieres quitar a ${nombre}?`)) return;
+        const respuesta = await fetch('/api/tecnicos/quitar', { method: 'POST', headers: cabecerasAuth(), body: JSON.stringify({ nombre }) });
+        const datos = await respuesta.json();
+        alert(datos.mensaje || datos.error || 'Listo.');
+        cargarTodo();
+      });
+    });
+  }
+
+  document.getElementById('btn-agregar-tecnico').addEventListener('click', async () => {
+    const nombre = document.getElementById('input-nuevo-tecnico').value.trim();
+    if (!nombre) return;
+    const respuesta = await fetch('/api/tecnicos/agregar', { method: 'POST', headers: cabecerasAuth(), body: JSON.stringify({ nombre }) });
+    const datos = await respuesta.json();
+    alert(datos.mensaje || datos.error || 'Listo.');
+    document.getElementById('input-nuevo-tecnico').value = '';
+    cargarTodo();
+  });
+
+  function renderizarSugerencias(sugerencias) {
+    const contenedor = document.getElementById('lista-sugerencias-admin');
+    if (!Array.isArray(sugerencias) || sugerencias.length === 0) {
+      contenedor.innerHTML = '<span class="vacio">Todavía no hay sugerencias.</span>';
+      return;
+    }
+    contenedor.innerHTML = sugerencias.map((s) => `
+      <div class="item">
+        <strong>${escaparHTML(s.nombre)}</strong> ${s.calificacion ? '⭐'.repeat(s.calificacion) + '☆'.repeat(5 - s.calificacion) : ''}<br>
+        ${s.tecnicoCalificado ? `<em>Sobre: ${escaparHTML(s.tecnicoCalificado)}</em><br>` : ''}
+        ${escaparHTML(s.mensaje)}<br>
+        <span style="color:#999; font-size:11px;">${new Date(s.fecha).toLocaleString('es-CO')}</span>
+      </div>
+    `).join('');
+  }
+
+  function renderizarAuditoria(registros) {
+    const contenedor = document.getElementById('lista-auditoria');
+    if (!Array.isArray(registros) || registros.length === 0) {
+      contenedor.innerHTML = '<span class="vacio">Todavía no hay ningún cambio registrado.</span>';
+      return;
+    }
+    contenedor.innerHTML = registros.map((r) => `
+      <div class="item">
+        <strong>${escaparHTML(r.accion)}</strong> — ${escaparHTML(r.detalle)}<br>
+        <span style="color:#999; font-size:11px;">${escaparHTML(r.realizadoPor)} · ${new Date(r.fecha).toLocaleString('es-CO')}</span>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('btn-exportar').addEventListener('click', () => {
+    if (todosLosTickets.length === 0) { alert('No hay tickets para exportar.'); return; }
+    const encabezados = ['Ticket', 'Tipo de servicio', 'Categoría', 'Prioridad', 'Estado', 'Creado por', 'Área', 'Cargo', 'Extensión', 'Incidencia', 'Técnico asignado', 'Solución', 'Fecha creación'];
+    const filas = todosLosTickets.map((t) => [
+      t.numero, t.tipoServicio || 'Incidente', t.categoria, t.prioridad || 'Media', t.estado, t.nombre, t.area || '', t.cargo || '', t.extension || '',
+      t.descripcion, t.tecnicoAsignado || 'Sin asignar', t.solucion || '',
+      t.fechaCreacion ? new Date(t.fechaCreacion).toLocaleString('es-CO') : ''
+    ]);
+    function celdaCSV(valor) {
+      return `"${String(valor == null ? '' : valor).replace(/"/g, '""')}"`;
+    }
+    const contenidoCSV = [encabezados, ...filas].map((fila) => fila.map(celdaCSV).join(',')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + contenidoCSV], { type: 'text/csv;charset=utf-8;' });
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(blob);
+    enlace.download = `tickets-soporte-tecnico-${new Date().toISOString().slice(0, 10)}.csv`;
+    enlace.click();
+  });
+
+  if (usuarioActual && claveActual) {
+    mostrarAdmin();
+    cargarTodo();
+  } else {
+    mostrarPantallaClave();
+  }
+</script>
+
+</body>
+</html>
