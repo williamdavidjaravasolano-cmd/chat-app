@@ -1117,12 +1117,18 @@
     }
 
     opcionesPanel.innerHTML = '';
+
+    const tituloMenu = document.createElement('div');
+    tituloMenu.textContent = '👋 ¿Qué quieres hacer?';
+    tituloMenu.style.cssText = 'font-size:13px; font-weight:bold; color:#0B4F6C; margin-bottom:6px;';
+    opcionesPanel.appendChild(tituloMenu);
+
     const selectOpciones = document.createElement('select');
     selectOpciones.id = 'select-opciones';
 
     const opcionPlaceholder = document.createElement('option');
     opcionPlaceholder.value = '';
-    opcionPlaceholder.textContent = '— Elige una opción —';
+    opcionPlaceholder.textContent = 'Toca aquí para ver las opciones 👇';
     opcionPlaceholder.disabled = true;
     opcionPlaceholder.selected = true;
     selectOpciones.appendChild(opcionPlaceholder);
