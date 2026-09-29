@@ -1680,14 +1680,16 @@
       acciones.classList.add('acciones-tecnico');
 
       if (ticket.estado !== 'Resuelto') {
-        const botonTomar = document.createElement('button');
-        botonTomar.type = 'button';
-        botonTomar.classList.add('btn-tomar');
-        botonTomar.textContent = '🧑‍💻 Tomar';
-        botonTomar.addEventListener('click', () => {
-          socket.emit('tomar-ticket-boton', { numero: ticket.numero });
-        });
-        acciones.appendChild(botonTomar);
+        if (!ticket.tecnicoAsignado) {
+          const botonTomar = document.createElement('button');
+          botonTomar.type = 'button';
+          botonTomar.classList.add('btn-tomar');
+          botonTomar.textContent = '🧑‍💻 Tomar';
+          botonTomar.addEventListener('click', () => {
+            socket.emit('tomar-ticket-boton', { numero: ticket.numero });
+          });
+          acciones.appendChild(botonTomar);
+        }
 
         const botonResolver = document.createElement('button');
         botonResolver.type = 'button';
