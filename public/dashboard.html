@@ -962,7 +962,14 @@
     }
   });
 
-  setInterval(() => cargarTodo(false), 20000);
+  // No interrumpir la actualizacion automatica si hay un formulario de "Resolver"
+  // abierto en este momento -- antes, cada 20 segundos se reconstruia toda la tabla
+  // y borraba lo que la persona estaba escribiendo.
+  setInterval(() => {
+    const hayFormularioAbierto = contenedorTabla.querySelector('.form-resolver-fila');
+    if (hayFormularioAbierto) return;
+    cargarTodo(false);
+  }, 20000);
 
   // ---------- Panel fijo de estado del sistema (siempre visible) ----------
   function badgeServicio(nombre, operativo) {
