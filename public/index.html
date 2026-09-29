@@ -636,6 +636,7 @@
     <div style="display:flex; align-items:center;">
       <button id="btn-menu" title="Volver al menu">🏠 Menú</button>
       <button id="btn-modo-oscuro" title="Modo oscuro">🌙</button>
+      <span id="reloj-en-vivo" style="font-size:12px; margin-left:8px; opacity:0.85; white-space:nowrap;"></span>
     </div>
     <span>Chat Soporte Tecnico</span>
     <span class="sala-nombre" id="sala-actual-label"></span>
@@ -787,6 +788,16 @@
   }
   // ---------- Modo oscuro ----------
   const btnModoOscuro = document.getElementById('btn-modo-oscuro');
+
+  // ---------- Reloj en tiempo real, junto al boton de modo oscuro ----------
+  function actualizarRelojEnVivo() {
+    const relojEl = document.getElementById('reloj-en-vivo');
+    if (relojEl) {
+      relojEl.textContent = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+  }
+  actualizarRelojEnVivo();
+  setInterval(actualizarRelojEnVivo, 1000);
   function aplicarModoOscuro(activo) {
     document.body.classList.toggle('modo-oscuro', activo);
     btnModoOscuro.textContent = activo ? '☀️' : '🌙';
@@ -1159,10 +1170,12 @@
     panel.style.display = 'block';
   }
 
-  // Regresa del panel actual al menu de "Más opciones" (☰)
+  // Cierra el panel actual y oculta tambien el menu de opciones (☰), en vez de
+  // volver a mostrarlo -- asi no queda "flotando" a la vista cada vez que se
+  // termina de usar algo; si se quiere abrir de nuevo, se toca ☰.
   function volverAOpciones() {
     cerrarPaneles(opcionesPanel);
-    opcionesPanel.style.display = 'grid';
+    opcionesPanel.style.display = 'none';
   }
 
   // Agrega el boton "← Volver al menú" al final de un panel
