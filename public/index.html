@@ -1292,25 +1292,13 @@
     }
     ticketPanel.appendChild(textarea);
 
-    // ---- Tipo de servicio (segun el protocolo oficial de mesa de ayuda) ----
-    const etiquetaTipoServicio = document.createElement('div');
-    etiquetaTipoServicio.textContent = '¿Qué tipo de solicitud es?';
-    etiquetaTipoServicio.style.cssText = 'font-size:13px; color:#555; margin-top:8px;';
-    ticketPanel.appendChild(etiquetaTipoServicio);
-
-    const selectTipoServicio = document.createElement('select');
-    selectTipoServicio.style.cssText = 'width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin:6px 0;';
-    [
-      { valor: 'Incidente', texto: '⚠️ Incidente — algo dejó de funcionar' },
-      { valor: 'Requerimiento', texto: '📝 Requerimiento — necesito algo nuevo o una mejora' }
-    ].forEach(({ valor, texto }) => {
-      const opcion = document.createElement('option');
-      opcion.value = valor;
-      opcion.textContent = texto;
-      if (valor === 'Incidente') opcion.selected = true;
-      selectTipoServicio.appendChild(opcion);
-    });
-    ticketPanel.appendChild(selectTipoServicio);
+    // ---- Tipo de servicio ----
+    // Ya no lo elige el usuario: el sistema lo determina automaticamente
+    // (con IA) segun la descripcion, igual que la prioridad.
+    const notaTipoServicio = document.createElement('div');
+    notaTipoServicio.textContent = 'ℹ️ El tipo de solicitud se detecta automáticamente según lo que describas.';
+    notaTipoServicio.style.cssText = 'font-size:12px; color:#888; margin-top:8px; font-style:italic;';
+    ticketPanel.appendChild(notaTipoServicio);
 
     // ---- Prioridad ----
     // Ya no la elige el usuario: el sistema la determina automaticamente
@@ -1431,7 +1419,6 @@
         categoria,
         descripcion,
         escalar: !!escalar,
-        tipoServicio: selectTipoServicio.value,
         imagenAdjunta: imagenAdjuntaBase64
       });
       ticketPanel.style.display = 'none';

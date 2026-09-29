@@ -754,6 +754,58 @@ Si la descripción es ambigua o muy corta, usa Media.`
   }
 }
 
+// Le pide a la IA que determine si el caso es un Incidente (algo dejo de funcionar)
+// o un Requerimiento (piden algo nuevo o una mejora), para que el usuario no tenga
+// que elegirlo. Si la IA falla, usa "Incidente" por defecto (lo mas comun).
+async function clasificarTipoServicioConIA(descripcion, categoria) {
+  const TIPO_POR_DEFECTO = 'Incidente';
+  if (!GROQ_API_KEY) return TIPO_POR_DEFECTO;
+
+  try {
+    const respuesta = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'openai/gpt-oss-20b',
+        messages: [
+          {
+            role: 'system',
+            content: `Eres un clasificador de casos para un sistema de soporte técnico de un hospital. Responde con UNA SOLA PALABRA, exactamente una de estas dos: Incidente o Requerimiento. No agregues explicación ni puntuación.
+
+Guía:
+- Incidente: algo que YA FUNCIONABA dejó de funcionar, está fallando, dando error, lento, o roto (ej: "no me deja imprimir", "el internet no funciona", "se cerró el programa solo").
+- Requerimiento: piden algo NUEVO que antes no tenían, una instalación, un acceso, una mejora, o una solicitud (ej: "necesito instalar un programa", "necesito acceso a una carpeta", "quiero un equipo nuevo").
+
+Si es ambiguo, usa Incidente.`
+          },
+          {
+            role: 'user',
+            content: `Categoría: ${categoria || 'N/A'}\nDescripción: ${descripcion}`
+          }
+        ],
+        max_tokens: 5,
+        temperature: 0
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (!respuesta.ok) return TIPO_POR_DEFECTO;
+
+    const datos = await respuesta.json();
+    const texto = datos.choices && datos.choices[0] ? datos.choices[0].message.content.trim() : '';
+    const limpio = texto.replace(/[^a-zA-ZÁÉÍÓÚáéíóú]/g, '');
+    const opcionesValidas = ['Incidente', 'Requerimiento'];
+    const encontrada = opcionesValidas.find((opcion) => normalizarTexto(opcion) === normalizarTexto(limpio));
+    return encontrada || TIPO_POR_DEFECTO;
+  } catch (err) {
+    console.error('Error clasificando el tipo de servicio con IA:', err.message);
+    return TIPO_POR_DEFECTO;
+  }
+}
+
 // Cada vez que se resuelve un ticket con el comando /resolver, se guarda aqui
 // para que quede disponible aunque el servidor se reinicie.
 const conocimientoSchema = new mongoose.Schema({
@@ -1713,13 +1765,14 @@ io.on('connection', (socket) => {
   // El usuario crea un ticket nuevo (categoria + descripcion del problema)
   // Si "escalar" es true, el usuario pidio hablar directo con un tecnico,
   // sin que el bot intente responder automaticamente con el FAQ.
-  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion, escalar, imagenAdjunta, tipoServicio }) => {
+  socket.on('crear-ticket', async ({ nombre, sala, categoria, descripcion, escalar, imagenAdjunta }) => {
     try {
       const numero = await generarNumeroTicket();
       const historial = [{ estado: 'Creado' }];
-      const tipoServicioFinal = ['Incidente', 'Requerimiento'].includes(tipoServicio) ? tipoServicio : 'Incidente';
-      // La prioridad ya no la elige el usuario (para evitar que todos pongan "Urgente"):
-      // la determina la IA segun la descripcion, la categoria y el tipo de servicio.
+      // El tipo de servicio y la prioridad ya no los elige el usuario: los determina
+      // la IA segun la descripcion, para que sea mas simple y no dependa de que
+      // la persona sepa la diferencia entre "Incidente" y "Requerimiento".
+      const tipoServicioFinal = await clasificarTipoServicioConIA(descripcion, categoria);
       const prioridadFinal = await clasificarPrioridadConIA(descripcion, categoria, tipoServicioFinal);
 
       // Si la descripcion coincide con una pregunta frecuente, damos una respuesta rapida
