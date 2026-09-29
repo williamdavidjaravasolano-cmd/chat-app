@@ -232,6 +232,7 @@
   body.modo-oscuro #grafico-resumen > div,
   body.modo-oscuro #panel-estado-sistema,
   body.modo-oscuro #panel-tecnicos-en-linea-dash,
+  body.modo-oscuro #panel-resumen-tecnico,
   body.modo-oscuro #panel-top-problemas,
   body.modo-oscuro #panel-auditoria-dash,
   body.modo-oscuro #calificacion-tecnicos > div,
@@ -316,6 +317,11 @@
     </div>
 
     <div style="font-size:12px; font-weight:bold; color:#0B4F6C; text-transform:uppercase; letter-spacing:0.5px; margin:20px 0 8px;">🎫 Gestión de tickets</div>
+
+    <div id="panel-resumen-tecnico" style="background:white; border-radius:10px; padding:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:13px; color:#555; font-weight:bold; margin-bottom:8px;">👥 Resumen de casos por técnico</div>
+      <div id="tabla-resumen-tecnico" style="overflow-x:auto;"></div>
+    </div>
 
     <div id="grafico-resumen"></div>
     <div class="tarjetas" id="tarjetas-resumen"></div>
@@ -720,6 +726,7 @@
     const atrasados = tickets.filter(estaAtrasado).length;
 
     renderizarGraficoResumen(tickets);
+    renderizarResumenPorTecnico(tickets);
 
     tarjetasResumen.innerHTML = `
       <div class="tarjeta ${filtroRapido === null ? 'activa' : ''}" data-filtro=""><div class="numero">${total}</div><div class="etiqueta">Total</div></div>
@@ -727,6 +734,52 @@
       <div class="tarjeta ${filtroRapido === 'pendientes' ? 'activa' : ''}" data-filtro="pendientes"><div class="numero">${pendientes}</div><div class="etiqueta">Pendientes</div></div>
       <div class="tarjeta ${filtroRapido === 'sinAsignar' ? 'activa' : ''}" data-filtro="sinAsignar"><div class="numero">${sinAsignar}</div><div class="etiqueta">Sin asignar</div></div>
       <div class="tarjeta tarjeta-alerta ${filtroRapido === 'atrasados' ? 'activa' : ''}" data-filtro="atrasados"><div class="numero">${atrasados}</div><div class="etiqueta">⚠️ Atrasados (según SLA)</div></div>
+    `;
+  }
+
+  // Resumen de cuantos casos tiene cada tecnico: asignados (activos, sin resolver
+  // todavia), pendientes de tomar no aplica aqui (esos son "Sin asignar" en general),
+  // y resueltos -- para ver de un vistazo como esta repartida la carga de trabajo.
+  function renderizarResumenPorTecnico(tickets) {
+    const contenedor = document.getElementById('tabla-resumen-tecnico');
+    const tecnicos = (listaTecnicos && listaTecnicos.length ? listaTecnicos : []);
+
+    if (tecnicos.length === 0) {
+      contenedor.innerHTML = '<span style="color:#888; font-size:13px;">No hay técnicos registrados.</span>';
+      return;
+    }
+
+    const filas = tecnicos.map((tecnico) => {
+      const deEsteTecnico = tickets.filter((t) => t.tecnicoAsignado === tecnico);
+      const asignados = deEsteTecnico.filter((t) => t.estado !== 'Resuelto').length;
+      const resueltos = deEsteTecnico.filter((t) => t.estado === 'Resuelto').length;
+      return { tecnico, asignados, resueltos, total: asignados + resueltos };
+    }).sort((a, b) => b.total - a.total);
+
+    const sinAsignarTotal = tickets.filter((t) => !t.tecnicoAsignado && t.estado !== 'Resuelto').length;
+
+    contenedor.innerHTML = `
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="text-align:left; border-bottom:2px solid #eee;">
+            <th style="padding:6px 8px;">Técnico</th>
+            <th style="padding:6px 8px;">🟡 Asignados (activos)</th>
+            <th style="padding:6px 8px;">✅ Resueltos</th>
+            <th style="padding:6px 8px;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filas.map((f) => `
+            <tr style="border-bottom:1px solid #f0f0f0;">
+              <td style="padding:6px 8px;">${escaparHTML(f.tecnico)}</td>
+              <td style="padding:6px 8px;">${f.asignados}</td>
+              <td style="padding:6px 8px;">${f.resueltos}</td>
+              <td style="padding:6px 8px; font-weight:bold;">${f.total}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ${sinAsignarTotal > 0 ? `<div style="margin-top:8px; font-size:12px; color:#c62828;">⚠️ ${sinAsignarTotal} caso(s) sin asignar todavía.</div>` : ''}
     `;
   }
 
@@ -806,8 +859,11 @@
       if (t.estado !== 'Resuelto') {
         botonesAccion += `<button type="button" class="btn-fila-tomar" data-accion="tomar" data-numero="${escaparHTML(t.numero)}">🧑‍💻 Tomar</button>`;
         botonesAccion += `<button type="button" class="btn-fila-resolver" data-accion="mostrar-resolver" data-numero="${escaparHTML(t.numero)}">✅ Resolver</button>`;
-      } else if (!t.aprobadoParaConocimiento) {
-        botonesAccion += `<button type="button" class="btn-fila-aprobar" data-accion="aprobar" data-numero="${escaparHTML(t.numero)}">🧠 Aprobar</button>`;
+      } else {
+        if (!t.aprobadoParaConocimiento) {
+          botonesAccion += `<button type="button" class="btn-fila-aprobar" data-accion="aprobar" data-numero="${escaparHTML(t.numero)}">🧠 Aprobar</button>`;
+        }
+        botonesAccion += `<button type="button" class="btn-fila-reabrir" data-accion="reabrir" data-numero="${escaparHTML(t.numero)}">🔄 Reabrir</button>`;
       }
 
       const filaResumen = `
@@ -943,6 +999,10 @@
       llamarAccion(numero, 'tomar');
     } else if (accion === 'aprobar') {
       llamarAccion(numero, 'aprobar');
+    } else if (accion === 'reabrir') {
+      if (confirm(`¿Reabrir el ticket #${numero}? Esto lo vuelve a marcar como activo.`)) {
+        llamarAccion(numero, 'reabrir');
+      }
     } else if (accion === 'mostrar-resolver') {
       const filaDetalle = contenedorTabla.querySelector(`tr[data-fila-detalle="${CSS.escape(numero)}"]`);
       if (!filaDetalle || filaDetalle.querySelector('.form-resolver-fila')) return;

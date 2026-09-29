@@ -356,6 +356,36 @@ app.post('/api/tickets/:numero/resolver', verificarCredencialesDashboard, async 
   }
 });
 
+// Reabrir un ticket ya resuelto, por si el problema vuelve a ocurrir
+app.post('/api/tickets/:numero/reabrir', verificarCredencialesDashboard, async (req, res) => {
+  try {
+    const ticket = await Ticket.findOne({ numero: req.params.numero });
+    if (!ticket) return res.status(404).json({ error: 'Ticket no encontrado' });
+    if (ticket.estado !== 'Resuelto') return res.status(400).json({ error: 'Este ticket no está resuelto.' });
+
+    ticket.estado = 'En proceso'; // vuelve a quedar activo, con el mismo tecnico asignado
+    ticket.alertaSlaEnviada = false; // para que pueda volver a avisar si se acerca a vencer
+    ticket.historial.push({ estado: 'Reabierto' });
+    await ticket.save();
+
+    await registrarAuditoria('Reabrir ticket', `Ticket #${ticket.numero} reabierto (técnico: ${ticket.tecnicoAsignado || 'sin asignar'})`, req.tecnicoDashboard);
+
+    const mensajeReabierto = {
+      sala: SALA_SOPORTE,
+      nombre: NOMBRE_BOT_SOPORTE,
+      texto: `🔄 ${req.tecnicoDashboard} reabrió el ticket #${ticket.numero} porque el problema volvió a ocurrir.${ticket.tecnicoAsignado ? ` ${ticket.tecnicoAsignado} ya está al tanto.` : ''}`,
+      tipo: 'texto',
+      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })
+    };
+    await enviarMensaje(mensajeReabierto, ticket.nombre);
+
+    res.json({ ok: true, ticket });
+  } catch (err) {
+    console.error('Error reabriendo ticket:', err.message);
+    res.status(500).json({ error: 'Error reabriendo el ticket' });
+  }
+});
+
 // Aprobar la solucion de un ticket resuelto para la base de conocimiento, desde el dashboard
 app.post('/api/tickets/:numero/aprobar', verificarCredencialesDashboard, async (req, res) => {
   try {
