@@ -607,7 +607,7 @@
 
   <div id="login-normal" style="display:none;">
     <h2>Soporte Técnico</h2>
-    <input type="text" id="input-nombre" placeholder="Escribe tu nombre" maxlength="20">
+    <input type="text" id="input-nombre" placeholder="Nombre y apellido (ej: María Pérez)" maxlength="40">
 
     <input type="password" id="input-clave-tecnico" placeholder="Contraseña de técnico" style="display:none;">
     <div id="error-login-tecnico" style="display:none; color:#d32f2f; font-size:12px; margin:-6px 0 6px;"></div>
@@ -618,6 +618,7 @@
       <input type="text" id="input-ext" placeholder="Extensión (ej: 1234)">
     </div>
 
+    <div id="error-login-campos" style="display:none; color:#d32f2f; font-size:12px; margin:-2px 0 8px;"></div>
     <button id="btn-entrar">Entrar</button>
   </div>
 
@@ -957,18 +958,27 @@
   });
 
   function entrarAlChat() {
-    const nombre = inputNombre.value.trim();
-    if (!nombre) return;
+    const nombre = inputNombre.value.trim().replace(/\s+/g, ' ');
+    const area = inputArea.value.trim();
+    const cargo = inputCargo.value.trim();
+    const ext = inputExt.value.trim();
+    const errorCampos = document.getElementById('error-login-campos');
+    const mostrarError = (msg) => { errorCampos.textContent = msg; errorCampos.style.display = 'block'; };
+    errorCampos.style.display = 'none';
 
+    if (!nombre) return mostrarError('Escribe tu nombre y apellido.');
+    // Los técnicos se identifican con su nombre registrado; los demás deben escribir nombre y apellido
+    if (!esNombreDeTecnico(nombre) && nombre.split(' ').length < 2) {
+      return mostrarError('Escribe tu nombre y apellido (por ejemplo: María Pérez).');
+    }
     if (esNombreDeTecnico(nombre) && !inputClaveTecnico.value.trim()) {
       errorLoginTecnico.textContent = 'Escribe la contraseña de técnico para continuar.';
       errorLoginTecnico.style.display = 'block';
       return;
     }
-
-    const area = inputArea.value.trim();
-    const cargo = inputCargo.value.trim();
-    const ext = inputExt.value.trim();
+    if (!area) return mostrarError('El área es obligatoria.');
+    if (!cargo) return mostrarError('El cargo es obligatorio.');
+    if (!ext) return mostrarError('La extensión es obligatoria.');
     const clave = inputClaveTecnico.value;
 
     miNombre = nombre;
