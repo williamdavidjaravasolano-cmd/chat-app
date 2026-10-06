@@ -607,17 +607,18 @@
 
   <div id="login-normal" style="display:none;">
     <h2>Soporte Técnico</h2>
-    <input type="text" id="input-nombre" placeholder="Nombre y apellido (ej: María Pérez)" maxlength="40">
+    <input type="text" id="input-nombre" placeholder="Nombre y apellido * (ej: María Pérez)" maxlength="40">
 
     <input type="password" id="input-clave-tecnico" placeholder="Contraseña de técnico" style="display:none;">
     <div id="error-login-tecnico" style="display:none; color:#d32f2f; font-size:12px; margin:-6px 0 6px;"></div>
 
     <div id="campos-soporte">
-      <input type="text" id="input-area" placeholder="Área (ej: Laboratorio)">
-      <input type="text" id="input-cargo" placeholder="Cargo (ej: Enfermera jefe)">
-      <input type="text" id="input-ext" placeholder="Extensión (ej: 1234)">
+      <input type="text" id="input-area" placeholder="Área * (ej: Laboratorio)">
+      <input type="text" id="input-cargo" placeholder="Cargo * (ej: Enfermera jefe)">
+      <input type="text" id="input-ext" placeholder="Extensión * (ej: 1234)">
     </div>
 
+    <div style="font-size:12px; color:#666; margin:-2px 0 8px; text-align:left;"><span style="color:#d32f2f; font-weight:bold;">*</span> Todos los campos son obligatorios</div>
     <div id="error-login-campos" style="display:none; color:#d32f2f; font-size:12px; margin:-2px 0 8px;"></div>
     <button id="btn-entrar">Entrar</button>
   </div>
@@ -963,22 +964,24 @@
     const cargo = inputCargo.value.trim();
     const ext = inputExt.value.trim();
     const errorCampos = document.getElementById('error-login-campos');
-    const mostrarError = (msg) => { errorCampos.textContent = msg; errorCampos.style.display = 'block'; };
+    const marcar = (input) => { input.style.border = '2px solid #d32f2f'; input.focus(); };
+    [inputNombre, inputArea, inputCargo, inputExt].forEach((i) => { i.style.border = ''; });
+    const mostrarError = (msg, input) => { errorCampos.textContent = msg; errorCampos.style.display = 'block'; if (input) marcar(input); };
     errorCampos.style.display = 'none';
 
-    if (!nombre) return mostrarError('Escribe tu nombre y apellido.');
+    if (!nombre) return mostrarError('Escribe tu nombre y apellido.', inputNombre);
     // Los técnicos se identifican con su nombre registrado; los demás deben escribir nombre y apellido
     if (!esNombreDeTecnico(nombre) && nombre.split(' ').length < 2) {
-      return mostrarError('Escribe tu nombre y apellido (por ejemplo: María Pérez).');
+      return mostrarError('Escribe tu nombre y apellido (por ejemplo: María Pérez).', inputNombre);
     }
     if (esNombreDeTecnico(nombre) && !inputClaveTecnico.value.trim()) {
       errorLoginTecnico.textContent = 'Escribe la contraseña de técnico para continuar.';
       errorLoginTecnico.style.display = 'block';
       return;
     }
-    if (!area) return mostrarError('El área es obligatoria.');
-    if (!cargo) return mostrarError('El cargo es obligatorio.');
-    if (!ext) return mostrarError('La extensión es obligatoria.');
+    if (!area) return mostrarError('El área es obligatoria.', inputArea);
+    if (!cargo) return mostrarError('El cargo es obligatorio.', inputCargo);
+    if (!ext) return mostrarError('La extensión es obligatoria.', inputExt);
     const clave = inputClaveTecnico.value;
 
     miNombre = nombre;
@@ -1020,6 +1023,8 @@
     inputCargo.value = '';
     inputExt.value = '';
   });
+
+  [inputNombre, inputArea, inputCargo, inputExt].forEach((i) => i.addEventListener('input', () => { i.style.border = ''; }));
 
   btnEntrar.addEventListener('click', entrarAlChat);
 
