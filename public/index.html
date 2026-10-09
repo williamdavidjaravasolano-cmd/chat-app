@@ -618,7 +618,7 @@
       <input type="text" id="input-ext" placeholder="Extensión * (ej: 1234)">
     </div>
 
-    <div style="font-size:12px; color:#666; margin:-2px 0 8px; text-align:left;"><span style="color:#d32f2f; font-weight:bold;">*</span> Todos los campos son obligatorios</div>
+    <div id="nota-obligatorios" style="font-size:12px; color:#666; margin:-2px 0 8px; text-align:left;"><span style="color:#d32f2f; font-weight:bold;">*</span> Todos los campos son obligatorios</div>
     <div id="error-login-campos" style="display:none; color:#d32f2f; font-size:12px; margin:-2px 0 8px;"></div>
     <button id="btn-entrar">Entrar</button>
   </div>
@@ -875,6 +875,9 @@
   inputNombre.addEventListener('input', () => {
     const esTecnico = esNombreDeTecnico(inputNombre.value);
     inputClaveTecnico.style.display = esTecnico ? 'block' : 'none';
+    // Para técnicos los campos de área, cargo y extensión no son obligatorios
+    camposSoporte.style.display = esTecnico ? 'none' : 'block';
+    document.getElementById('nota-obligatorios').style.display = esTecnico ? 'none' : 'block';
     errorLoginTecnico.style.display = 'none';
     if (!esTecnico) inputClaveTecnico.value = '';
   });
@@ -979,9 +982,12 @@
       errorLoginTecnico.style.display = 'block';
       return;
     }
-    if (!area) return mostrarError('El área es obligatoria.', inputArea);
-    if (!cargo) return mostrarError('El cargo es obligatorio.', inputCargo);
-    if (!ext) return mostrarError('La extensión es obligatoria.', inputExt);
+    // Técnicos y administradores no llenan área, cargo ni extensión
+    if (!esNombreDeTecnico(nombre)) {
+      if (!area) return mostrarError('El área es obligatoria.', inputArea);
+      if (!cargo) return mostrarError('El cargo es obligatorio.', inputCargo);
+      if (!ext) return mostrarError('La extensión es obligatoria.', inputExt);
+    }
     const clave = inputClaveTecnico.value;
 
     miNombre = nombre;
